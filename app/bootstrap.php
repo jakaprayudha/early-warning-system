@@ -104,6 +104,53 @@ function db(): PDO
         'CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id
          ON password_reset_tokens(user_id)'
     );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS alert_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hazard_type TEXT NOT NULL
+                CHECK (hazard_type IN ("weather", "tornado", "river_flood", "coastal_tide")),
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+            location_name TEXT NOT NULL,
+            severity TEXT NOT NULL CHECK (severity IN ("watch", "alert", "warning")),
+            trigger_indicator TEXT NOT NULL,
+            trigger_value TEXT NOT NULL,
+            threshold_value TEXT NOT NULL DEFAULT "",
+            source_label TEXT NOT NULL DEFAULT "",
+            handling_status TEXT NOT NULL DEFAULT "open"
+                CHECK (handling_status IN ("open", "closed")),
+            acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            acknowledged_at INTEGER,
+            assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            started_at INTEGER NOT NULL,
+            closed_at INTEGER,
+            close_reason TEXT NOT NULL DEFAULT "",
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE INDEX IF NOT EXISTS alert_events_status_region
+         ON alert_events(handling_status, region_id, started_at)'
+    );
+    $connection->exec(
+        'CREATE INDEX IF NOT EXISTS alert_events_hazard_severity
+         ON alert_events(hazard_type, severity, started_at)'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS alert_event_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            action TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT "",
+            created_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE INDEX IF NOT EXISTS alert_event_log_event_time
+         ON alert_event_log(event_id, created_at)'
+    );
 
     return $connection;
 }

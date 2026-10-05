@@ -44,6 +44,8 @@ Untuk mengisi akun dummy lokal sesuai contoh, jalankan `database/seed_admin.sql`
 - Perubahan peran, status akun, cakupan, pembuatan wilayah, dan pembuatan administrator pertama dicatat pada tabel `access_audit_log`. Alasan wajib diisi untuk perubahan melalui antarmuka admin.
 - Sistem mencegah administrator menonaktifkan administrator aktif terakhir.
 - Dashboard pasca-login menyediakan sidebar sesuai peran untuk pemantauan, kejadian, riwayat, master data bahaya/lokasi/sensor/parameter/ambang/aturan/penerima, integrasi, laporan, kesehatan sistem, pengguna, dan audit.
-- Ringkasan dashboard dan halaman menu sudah tersedia; peta, kejadian, metrik sensor, ingest, serta layar master selain pengguna/wilayah belum terhubung ke data operasional dan ditandai sebagai belum tersedia.
+- Ringkasan dashboard, kejadian aktif, riwayat peringatan, dan halaman menu sudah tersedia. Peta dan metrik sensor belum terhubung ke data operasional; layar master selain pengguna/wilayah masih menunggu implementasi.
+- Kejadian aktif mendukung laporan manual terkontrol, pengakuan, penetapan petugas, eskalasi Waspada → Siaga → Awas, catatan tindakan, penutupan beralasan, filter, dan riwayat tindakan. Riwayat peringatan mendukung filter dan ekspor CSV yang dibatasi cakupan wilayah.
+- Peringatan otomatis belum dihasilkan karena ingest sensor dan mesin evaluasi aturan belum dibuat. Laporan manual ditandai sebagai laporan awal, bukan hasil evaluasi sensor.
 
-Dashboard pasca-login dan navigasi peran sudah tersedia. Peta monitoring, data kejadian, dan halaman operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.
+Dashboard pasca-login dan navigasi peran sudah tersedia. Peringatan otomatis, peta monitoring, dan halaman master operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.

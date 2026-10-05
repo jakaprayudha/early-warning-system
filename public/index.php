@@ -19,6 +19,8 @@ $allowedPages = [
     'reset-password',
     'dashboard',
     'admin',
+    'alerts',
+    'history',
     'logout',
 ];
 if (!is_string($page) || !in_array($page, $allowedPages, true)) {
@@ -58,7 +60,7 @@ if ($page === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('/?page=login');
 }
 
-if (in_array($page, ['dashboard', 'admin'], true) && $user === null) {
+if (in_array($page, ['dashboard', 'admin', 'alerts', 'history'], true) && $user === null) {
     redirect_to('/?page=login');
 }
 if ($page === 'admin' && !user_has_permission($user, 'manage_access')) {
@@ -67,6 +69,18 @@ if ($page === 'admin' && !user_has_permission($user, 'manage_access')) {
     exit;
 }
 if ($page === 'dashboard' && !user_has_permission($user, 'dashboard')) {
+    http_response_code(403);
+    render_access_denied();
+    exit;
+}
+if ($page === 'alerts' && !user_has_permission($user, 'handle_alerts')) {
+    http_response_code(403);
+    render_access_denied();
+    exit;
+}
+if ($page === 'history'
+    && !user_has_permission($user, 'view_reports')
+    && !user_has_permission($user, 'manage_access')) {
     http_response_code(403);
     render_access_denied();
     exit;
@@ -160,6 +174,83 @@ if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect_to('/?page=admin');
 }
 
+if ($page === 'alerts' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_is_valid()) {
+        http_response_code(400);
+        render_alerts_page(
+            $user,
+            list_alert_events($user, [], true),
+            user_regions($user),
+            null,
+            'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.'
+        );
+        exit;
+    }
+
+    try {
+        $action = post_value('action');
+        if ($action === 'create') {
+            if (!in_array($user['role'], ['system_admin', 'operator'], true)) {
+                throw new InvalidArgumentException('Peran Anda tidak diizinkan mencatat kejadian.');
+            }
+            $regionId = filter_var(post_value('region_id'), FILTER_VALIDATE_INT);
+            $fields = [
+                'hazard_type' => post_value('hazard_type'),
+                'severity' => post_value('severity'),
+                'location_name' => trim(post_value('location_name')),
+                'trigger_indicator' => trim(post_value('trigger_indicator')),
+                'trigger_value' => trim(post_value('trigger_value')),
+                'threshold_value' => trim(post_value('threshold_value')),
+                'source_label' => trim(post_value('source_label')),
+            ];
+            if ($regionId === false || $regionId < 1) {
+                throw new InvalidArgumentException('Pilih wilayah yang valid.');
+            }
+            if (!user_has_region_access($user, $regionId)) {
+                throw new InvalidArgumentException('Anda tidak memiliki akses ke wilayah tersebut.');
+            }
+            foreach ([
+                'location_name' => ['Nama lokasi/pos', 120],
+                'trigger_indicator' => ['Indikator pemicu', 160],
+                'trigger_value' => ['Nilai pemicu', 100],
+                'threshold_value' => ['Nilai ambang', 100],
+                'source_label' => ['Sumber laporan', 160],
+            ] as $field => [$label, $maxLength]) {
+                $length = preg_match_all('/./us', $fields[$field]);
+                if ($field !== 'threshold_value' && $field !== 'source_label'
+                    && ($length === false || $length < 1)) {
+                    throw new InvalidArgumentException($label . ' wajib diisi.');
+                }
+                if ($length === false || $length > $maxLength) {
+                    throw new InvalidArgumentException($label . ' maksimal ' . $maxLength . ' karakter.');
+                }
+            }
+            create_alert_event(
+                ['region_id' => $regionId] + $fields,
+                (int) $user['id']
+            );
+            flash('message', 'Kejadian berhasil dicatat dan muncul pada daftar kejadian aktif.');
+        } else {
+            $eventId = filter_var(post_value('event_id'), FILTER_VALIDATE_INT);
+            if ($eventId === false || $eventId < 1) {
+                throw new InvalidArgumentException('Kejadian yang dipilih tidak valid.');
+            }
+            if (!alert_event_is_visible($user, $eventId)) {
+                throw new InvalidArgumentException('Kejadian tidak ditemukan atau di luar cakupan akses.');
+            }
+            handle_alert_event($eventId, (int) $user['id'], $action, [
+                'assignee_id' => filter_var(post_value('assignee_id'), FILTER_VALIDATE_INT) ?: 0,
+                'reason' => trim(post_value('reason')),
+                'note' => trim(post_value('note')),
+            ]);
+            flash('message', 'Tindakan kejadian berhasil dicatat.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    }
+    redirect_to('/?page=alerts');
+}
+
 if ($page === 'dashboard') {
     $section = $_GET['section'] ?? 'overview';
     if (!is_string($section)) {
@@ -168,6 +259,82 @@ if ($page === 'dashboard') {
         exit;
     }
     render_dashboard($user, $section);
+    exit;
+}
+if ($page === 'alerts') {
+    $filters = [
+        'hazard' => $_GET['hazard'] ?? '',
+        'severity' => $_GET['severity'] ?? '',
+        'region_id' => $_GET['region_id'] ?? '',
+        'from' => $_GET['from'] ?? '',
+        'to' => $_GET['to'] ?? '',
+        'q' => $_GET['q'] ?? '',
+    ];
+    render_alerts_page(
+        $user,
+        list_alert_events($user, $filters, true),
+        user_regions($user),
+        flash('message'),
+        flash('error'),
+        $filters
+    );
+    exit;
+}
+if ($page === 'history') {
+    if (($_GET['export'] ?? '') === 'csv') {
+        $events = list_alert_events($user, $_GET);
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="riwayat-peringatan-' . date('Ymd-His') . '.csv"');
+        $output = fopen('php://output', 'wb');
+        if ($output === false) {
+            throw new RuntimeException('Tidak dapat membuat ekspor riwayat.');
+        }
+        fwrite($output, "\xEF\xBB\xBF");
+        fputcsv($output, array_map('csv_safe_value', [
+            'ID',
+            'Jenis bahaya',
+            'Tingkat',
+            'Status penanganan',
+            'Wilayah',
+            'Lokasi',
+            'Indikator pemicu',
+            'Nilai pemicu',
+            'Ambang',
+            'Sumber',
+            'Mulai',
+            'Diakui',
+            'Petugas',
+            'Selesai',
+            'Alasan penutupan',
+        ]), ',', '"', '');
+        foreach ($events as $event) {
+            fputcsv($output, array_map('csv_safe_value', [
+                $event['id'],
+                alert_hazards()[$event['hazard_type']] ?? $event['hazard_type'],
+                alert_severities()[$event['severity']] ?? $event['severity'],
+                $event['handling_status'] === 'closed' ? 'Selesai' : 'Aktif',
+                $event['region_name'],
+                $event['location_name'],
+                $event['trigger_indicator'],
+                $event['trigger_value'],
+                $event['threshold_value'],
+                $event['source_label'],
+                gmdate('Y-m-d H:i:s', (int) $event['started_at']),
+                $event['acknowledged_at'] ? gmdate('Y-m-d H:i:s', (int) $event['acknowledged_at']) : '',
+                $event['assignee_name'],
+                $event['closed_at'] ? gmdate('Y-m-d H:i:s', (int) $event['closed_at']) : '',
+                $event['close_reason'],
+            ]), ',', '"', '');
+        }
+        fclose($output);
+        exit;
+    }
+    render_history_page(
+        $user,
+        list_alert_events($user, $_GET),
+        user_regions($user),
+        $_GET
+    );
     exit;
 }
 if ($page === 'admin') {

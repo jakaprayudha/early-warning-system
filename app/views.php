@@ -285,9 +285,11 @@ function render_app_shell_start(
                         <?php foreach ($items as $key => $item): ?>
                             <?php
                             $targetPage = $item['page'] ?? 'dashboard';
-                            $href = $targetPage === 'dashboard'
-                                ? '/?page=dashboard&section=' . rawurlencode($key)
-                                : '/?page=' . rawurlencode($targetPage);
+                            $href = in_array($key, ['alerts', 'history'], true)
+                                ? '/?page=' . rawurlencode($key)
+                                : ($targetPage === 'dashboard'
+                                    ? '/?page=dashboard&section=' . rawurlencode($key)
+                                    : '/?page=' . rawurlencode($targetPage));
                             ?>
                             <a
                                 class="nav-link <?= $activeSection === $key ? 'is-active' : '' ?>"
@@ -363,6 +365,9 @@ function render_dashboard(array $user, string $section = 'overview'): void
     if ($section === 'users') {
         redirect_to('/?page=admin');
     }
+    if ($section === 'alerts' || $section === 'history') {
+        redirect_to('/?page=' . $section);
+    }
 
     $metadata = [
         'overview' => ['Ringkasan', 'PANTAUAN TERPADU'],
@@ -395,6 +400,8 @@ function render_dashboard_overview(array $user): void
 {
     $regions = user_regions($user);
     $regionCount = count($regions);
+    $openAlertCount = count_alert_events($user, 'open');
+    $activeEvents = array_slice(list_alert_events($user, [], true), 0, 3);
     $userCount = null;
     $pendingCount = null;
     if ($user['role'] === 'system_admin') {
@@ -421,8 +428,8 @@ function render_dashboard_overview(array $user): void
         </article>
         <article class="metric-card">
             <div class="metric-top"><span>Peringatan aktif</span><span class="metric-icon amber">⌁</span></div>
-            <strong class="metric-value metric-unavailable">—</strong>
-            <p class="metric-foot">Belum ada data kejadian</p>
+            <strong class="metric-value"><?= number_format($openAlertCount, 0, ',', '.') ?></strong>
+            <p class="metric-foot">Dalam cakupan wilayah Anda</p>
         </article>
         <article class="metric-card">
             <div class="metric-top"><span>Sumber data sehat</span><span class="metric-icon blue">◉</span></div>
@@ -463,13 +470,25 @@ function render_dashboard_overview(array $user): void
         <section class="panel incident-panel">
             <div class="panel-heading">
                 <div><h2>Kejadian terbaru</h2><p>Peringatan dan status penanganan</p></div>
-                <a class="panel-link" href="/?page=dashboard&section=alerts">Lihat semua <span aria-hidden="true">→</span></a>
+                <a class="panel-link" href="/?page=alerts">Lihat semua <span aria-hidden="true">→</span></a>
             </div>
-            <div class="incident-empty">
-                <span class="incident-empty-mark" aria-hidden="true">✓</span>
-                <strong>Belum ada kejadian</strong>
-                <p>Kejadian akan muncul setelah sumber data dan aturan peringatan dikonfigurasi.</p>
-            </div>
+            <?php if ($activeEvents === []): ?>
+                <div class="incident-empty">
+                    <span class="incident-empty-mark" aria-hidden="true">✓</span>
+                    <strong>Belum ada kejadian</strong>
+                    <p>Kejadian akan muncul setelah sumber data dan aturan peringatan dikonfigurasi atau dicatat petugas.</p>
+                </div>
+            <?php else: ?>
+                <div class="dashboard-event-list">
+                    <?php foreach ($activeEvents as $event): ?>
+                        <a class="dashboard-event-row" href="/?page=alerts">
+                            <span class="dashboard-event-severity severity-<?= e($event['severity']) ?>"><?= e(alert_severities()[$event['severity']]) ?></span>
+                            <span class="dashboard-event-copy"><strong><?= e($event['location_name']) ?></strong><small><?= e(alert_hazards()[$event['hazard_type']]) ?> · <?= e($event['region_name']) ?></small></span>
+                            <time><?= e(date('H:i', (int) $event['started_at'])) ?></time>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
             <div class="source-status">
                 <div class="source-status-heading"><strong>Status sumber data</strong><a href="/?page=dashboard&section=sensors">Lihat sumber</a></div>
                 <div class="source-row"><span><i class="source-indicator unavailable"></i>Sensor & feed</span><strong>Belum dikonfigurasi</strong></div>
@@ -478,16 +497,24 @@ function render_dashboard_overview(array $user): void
         </section>
     </div>
     <section class="panel setup-panel">
-        <div class="setup-copy">
-            <span class="setup-icon" aria-hidden="true">✦</span>
-            <div><strong>Mulai siapkan pemantauan EWS</strong><p>Lengkapi konfigurasi master sebelum sistem dapat memetakan risiko dan membuat peringatan.</p></div>
-        </div>
-        <div class="setup-steps">
-            <a href="/?page=dashboard&section=hazards"><span>01</span> Jenis bahaya <b>→</b></a>
-            <a href="/?page=dashboard&section=locations"><span>02</span> Wilayah & lokasi <b>→</b></a>
-            <a href="/?page=dashboard&section=sensors"><span>03</span> Sumber data <b>→</b></a>
-            <a href="/?page=dashboard&section=thresholds"><span>04</span> Ambang & aturan <b>→</b></a>
-        </div>
+        <?php if ($user['role'] === 'system_admin' || user_has_permission($user, 'manage_master_data')): ?>
+            <div class="setup-copy">
+                <span class="setup-icon" aria-hidden="true">✦</span>
+                <div><strong>Mulai siapkan pemantauan EWS</strong><p>Lengkapi konfigurasi master sebelum sistem dapat memetakan risiko dan membuat peringatan.</p></div>
+            </div>
+            <div class="setup-steps">
+                <a href="/?page=dashboard&section=hazards"><span>01</span> Jenis bahaya <b>→</b></a>
+                <a href="/?page=dashboard&section=locations"><span>02</span> Wilayah & lokasi <b>→</b></a>
+                <a href="/?page=dashboard&section=sensors"><span>03</span> Sumber data <b>→</b></a>
+                <a href="/?page=dashboard&section=thresholds"><span>04</span> Ambang & aturan <b>→</b></a>
+            </div>
+        <?php else: ?>
+            <div class="setup-copy">
+                <span class="setup-icon" aria-hidden="true">⌖</span>
+                <div><strong>Cakupan pemantauan Anda</strong><p><?= $regions === [] ? 'Belum ada wilayah yang ditetapkan; hubungi administrator untuk mendapatkan akses data.' : 'Ringkasan hanya mencakup wilayah yang ditetapkan beserta seluruh wilayah turunannya.' ?></p></div>
+            </div>
+            <a class="panel-link" href="/?page=history">Buka riwayat peringatan <span aria-hidden="true">→</span></a>
+        <?php endif; ?>
     </section>
     <?php if ($user['role'] === 'system_admin'): ?>
         <div class="dashboard-admin-summary">
@@ -539,6 +566,330 @@ function render_dashboard_placeholder(string $section, string $title): void
         <div class="module-status-heading"><span class="status-dot muted-dot"></span><div><strong>Modul belum terhubung ke data operasional</strong><p>Menu dan alur modul sudah disiapkan sesuai PRD. Pengelolaan data dan integrasi akan dibangun pada tahap berikutnya.</p></div></div>
         <a class="panel-link" href="/?page=dashboard">Kembali ke ringkasan <span aria-hidden="true">→</span></a>
     </section>
+    <?php
+}
+
+function alert_filter_value(array $filters, string $key): string
+{
+    $value = $filters[$key] ?? '';
+    return is_string($value) ? $value : '';
+}
+
+function render_alert_filters(array $regions, array $filters, bool $history): void
+{
+    $hazards = alert_hazards();
+    $severities = alert_severities();
+    ?>
+    <form class="alert-filter-form" method="get" action="/">
+        <input type="hidden" name="page" value="<?= $history ? 'history' : 'alerts' ?>">
+        <label class="filter-search">Cari
+            <input type="search" name="q" value="<?= e(alert_filter_value($filters, 'q')) ?>" placeholder="Lokasi, indikator, sumber">
+        </label>
+        <label>Jenis bahaya
+            <select name="hazard">
+                <option value="">Semua bahaya</option>
+                <?php foreach ($hazards as $key => $label): ?>
+                    <option value="<?= e($key) ?>" <?= alert_filter_value($filters, 'hazard') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>Tingkat
+            <select name="severity">
+                <option value="">Semua tingkat</option>
+                <?php foreach ($severities as $key => $label): ?>
+                    <option value="<?= e($key) ?>" <?= alert_filter_value($filters, 'severity') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php if ($history): ?>
+            <label>Status
+                <select name="status">
+                    <option value="">Semua status</option>
+                    <option value="open" <?= alert_filter_value($filters, 'status') === 'open' ? 'selected' : '' ?>>Aktif</option>
+                    <option value="closed" <?= alert_filter_value($filters, 'status') === 'closed' ? 'selected' : '' ?>>Selesai</option>
+                </select>
+            </label>
+        <?php endif; ?>
+        <label>Wilayah
+            <select name="region_id">
+                <option value="">Semua wilayah</option>
+                <?php foreach ($regions as $region): ?>
+                    <option value="<?= (int) $region['id'] ?>" <?= alert_filter_value($filters, 'region_id') === (string) $region['id'] ? 'selected' : '' ?>><?= e($region['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>Dari tanggal
+            <input type="date" name="from" value="<?= e(alert_filter_value($filters, 'from')) ?>">
+        </label>
+        <label>Sampai tanggal
+            <input type="date" name="to" value="<?= e(alert_filter_value($filters, 'to')) ?>">
+        </label>
+        <button class="filter-submit" type="submit">Terapkan filter</button>
+        <a class="filter-reset" href="/?page=<?= $history ? 'history' : 'alerts' ?>">Reset</a>
+    </form>
+    <?php
+}
+
+function render_alert_event_card(array $event, array $user, bool $history = false): void
+{
+    $hazard = alert_hazards()[$event['hazard_type']] ?? $event['hazard_type'];
+    $severity = alert_severities()[$event['severity']] ?? $event['severity'];
+    $canOperate = !$history
+        && in_array($user['role'], ['system_admin', 'operator'], true)
+        && $event['handling_status'] === 'open';
+    $timeline = alert_event_timeline((int) $event['id']);
+    $assignees = $canOperate
+        ? alert_event_assignees((int) $event['region_id'])
+        : [];
+    ?>
+    <article class="alert-card">
+        <div class="alert-card-main">
+            <div class="alert-card-heading">
+                <span class="severity-pill severity-<?= e($event['severity']) ?>"><?= e($severity) ?></span>
+                <span class="hazard-label"><?= e($hazard) ?></span>
+                <span class="alert-id">EWS-<?= str_pad((string) $event['id'], 5, '0', STR_PAD_LEFT) ?></span>
+                <time datetime="<?= e(gmdate('c', (int) $event['started_at'])) ?>"><?= e(date('d M Y · H:i', (int) $event['started_at'])) ?></time>
+            </div>
+            <h2><?= e($event['location_name']) ?></h2>
+            <p class="alert-region"><?= e($event['region_name']) ?> <span>·</span> <?= e($event['region_code']) ?></p>
+            <div class="trigger-summary">
+                <span><small>Indikator pemicu</small><strong><?= e($event['trigger_indicator']) ?></strong></span>
+                <span><small>Nilai terukur</small><strong><?= e($event['trigger_value']) ?><?= $event['threshold_value'] !== '' ? ' <i>· Ambang ' . e($event['threshold_value']) . '</i>' : '' ?></strong></span>
+                <span><small>Sumber</small><strong><?= $event['source_label'] !== '' ? e($event['source_label']) : 'Laporan manual' ?></strong></span>
+            </div>
+            <div class="handling-summary">
+                <?php if ($event['acknowledged_at'] !== null): ?>
+                    <span class="handling-chip acknowledged">✓ Diakui <?= e($event['acknowledger_name'] ?? '') ?></span>
+                <?php else: ?>
+                    <span class="handling-chip unacknowledged">Belum diakui</span>
+                <?php endif; ?>
+                <span class="handling-chip">Petugas: <?= e($event['assignee_name'] ?? 'Belum ditetapkan') ?></span>
+                <?php if ($event['handling_status'] === 'closed'): ?>
+                    <span class="handling-chip closed-chip">Selesai <?= e(date('d M Y · H:i', (int) $event['closed_at'])) ?></span>
+                <?php endif; ?>
+            </div>
+            <?php if ($event['handling_status'] === 'closed' && $event['close_reason'] !== ''): ?>
+                <p class="close-reason"><strong>Alasan penutupan:</strong> <?= e($event['close_reason']) ?></p>
+            <?php endif; ?>
+        </div>
+        <details class="event-details">
+            <summary>Riwayat tindakan <span><?= count($timeline) ?></span></summary>
+            <div class="event-timeline">
+                <?php foreach ($timeline as $entry): ?>
+                    <div class="timeline-entry">
+                        <span class="timeline-dot"></span>
+                        <div><strong><?= e(alert_action_label($entry['action'])) ?> <small>oleh <?= e($entry['actor_name'] ?? 'Sistem') ?></small></strong><p><?= e($entry['details']) ?></p><time><?= e(date('d M Y · H:i', (int) $entry['created_at'])) ?></time></div>
+                    </div>
+                <?php endforeach; ?>
+                <?php if ($timeline === []): ?><p class="scope-hint">Belum ada tindakan tercatat.</p><?php endif; ?>
+            </div>
+        </details>
+        <?php if ($canOperate): ?>
+            <div class="alert-actions">
+                <?php if ($event['acknowledged_at'] === null): ?>
+                    <form method="post" action="/?page=alerts">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="acknowledge">
+                        <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                        <button class="action-button primary-action" type="submit">Akui kejadian</button>
+                    </form>
+                <?php endif; ?>
+                <?php if ($assignees !== []): ?>
+                    <form method="post" action="/?page=alerts" class="assign-form">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="assign">
+                        <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                        <label class="visually-hidden" for="assignee-<?= (int) $event['id'] ?>">Petugas penanggung jawab</label>
+                        <select id="assignee-<?= (int) $event['id'] ?>" name="assignee_id" required>
+                            <option value="">Tetapkan petugas…</option>
+                            <?php foreach ($assignees as $assignee): ?>
+                                <option value="<?= (int) $assignee['id'] ?>" <?= (int) $event['assigned_to'] === (int) $assignee['id'] ? 'selected' : '' ?>><?= e($assignee['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button class="action-button" type="submit">Tetapkan</button>
+                    </form>
+                <?php endif; ?>
+                <?php if ($event['severity'] !== 'warning'): ?>
+                    <form method="post" action="/?page=alerts">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="escalate">
+                        <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                        <button class="action-button" type="submit">Eskalasi tingkat</button>
+                    </form>
+                <?php endif; ?>
+                <form method="post" action="/?page=alerts" class="note-form">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="note">
+                    <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                    <label class="visually-hidden" for="note-<?= (int) $event['id'] ?>">Catatan tindakan</label>
+                    <input id="note-<?= (int) $event['id'] ?>" name="note" maxlength="1000" placeholder="Tambah catatan tindakan…" required>
+                    <button class="action-button" type="submit">Simpan catatan</button>
+                </form>
+                <form method="post" action="/?page=alerts" class="close-form">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="close">
+                    <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                    <label class="visually-hidden" for="reason-<?= (int) $event['id'] ?>">Alasan penutupan</label>
+                    <input id="reason-<?= (int) $event['id'] ?>" name="reason" maxlength="500" placeholder="Alasan penutupan kejadian…" required>
+                    <button class="action-button close-action" type="submit">Tutup kejadian</button>
+                </form>
+            </div>
+        <?php elseif (!$history && $user['role'] === 'field_officer' && (int) $event['assigned_to'] === (int) $user['id'] && $event['handling_status'] === 'open'): ?>
+            <form method="post" action="/?page=alerts" class="field-note-form">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="note">
+                <input type="hidden" name="event_id" value="<?= (int) $event['id'] ?>">
+                <label class="visually-hidden" for="field-note-<?= (int) $event['id'] ?>">Catatan progres lapangan</label>
+                <input id="field-note-<?= (int) $event['id'] ?>" name="note" maxlength="1000" placeholder="Catat progres atau tindakan lapangan…" required>
+                <button class="action-button primary-action" type="submit">Kirim progres</button>
+            </form>
+        <?php endif; ?>
+    </article>
+    <?php
+}
+
+function alert_action_label(string $action): string
+{
+    return [
+        'created' => 'Kejadian dicatat',
+        'acknowledge' => 'Kejadian diakui',
+        'assign' => 'Penanggung jawab ditetapkan',
+        'escalate' => 'Tingkat peringatan dieskalasi',
+        'close' => 'Kejadian ditutup',
+        'note' => 'Catatan tindakan',
+    ][$action] ?? $action;
+}
+
+function csv_safe_value(mixed $value): string
+{
+    $text = (string) ($value ?? '');
+    if ($text !== '' && preg_match('/^[\s]*[=+\-@]/u', $text)) {
+        return "'" . $text;
+    }
+
+    return $text;
+}
+
+function render_alerts_page(
+    array $user,
+    array $events,
+    array $regions,
+    ?string $message = null,
+    ?string $error = null,
+    array $filters = []
+): void {
+    $canCreate = in_array($user['role'], ['system_admin', 'operator'], true);
+    $hazards = alert_hazards();
+    $severities = alert_severities();
+    $openCount = count_alert_events($user, 'open');
+    $watchCount = count_alert_events($user, 'open', 'watch');
+    $alertCount = count_alert_events($user, 'open', 'alert');
+    $warningCount = count_alert_events($user, 'open', 'warning');
+    render_app_shell_start($user, 'alerts', 'Kejadian aktif', 'MONITORING & PERINGATAN');
+    ?>
+    <?php if ($message !== null): ?><div class="notice" role="status"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error !== null): ?><div class="admin-error" role="alert"><?= e($error) ?></div><?php endif; ?>
+    <div class="alert-summary">
+        <div><span>Aktif dalam cakupan</span><strong><?= number_format($openCount, 0, ',', '.') ?></strong></div>
+        <div><span>Waspada</span><strong class="summary-watch"><?= number_format($watchCount, 0, ',', '.') ?></strong></div>
+        <div><span>Siaga</span><strong class="summary-alert"><?= number_format($alertCount, 0, ',', '.') ?></strong></div>
+        <div><span>Awas</span><strong class="summary-warning"><?= number_format($warningCount, 0, ',', '.') ?></strong></div>
+    </div>
+    <div class="list-toolbar">
+        <div><h2>Daftar kejadian</h2><p>Urut berdasarkan tingkat dan waktu mulai. Status bahaya terpisah dari status penanganan.</p></div>
+        <?php if ($canCreate && $regions !== []): ?><a class="create-alert-link" href="#create-alert">+ Catat kejadian</a><?php endif; ?>
+    </div>
+    <?php render_alert_filters($regions, $filters, false); ?>
+    <div class="result-count">Menampilkan <strong><?= count($events) ?></strong> kejadian aktif sesuai filter dan cakupan akses.</div>
+    <?php if ($events === []): ?>
+        <section class="panel empty-alerts">
+            <span aria-hidden="true">✓</span><h2>Belum ada kejadian aktif</h2>
+            <p>Kejadian yang masuk melalui sistem evaluasi atau dicatat operator akan tampil di sini.</p>
+        </section>
+    <?php else: ?>
+        <div class="alert-list">
+            <?php foreach ($events as $event): ?>
+                <?php render_alert_event_card($event, $user); ?>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+    <?php if ($canCreate && $regions !== []): ?>
+        <details class="panel create-alert-panel" id="create-alert" <?= $error !== null ? 'open' : '' ?>>
+            <summary><span><strong>Catat kejadian secara manual</strong><small>Untuk laporan terverifikasi sebelum integrasi otomatis tersedia.</small></span><span aria-hidden="true">＋</span></summary>
+            <form method="post" action="/?page=alerts" class="create-alert-form">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="create">
+                <label>Jenis bahaya
+                    <select name="hazard_type" required>
+                        <?php foreach ($hazards as $key => $label): ?><option value="<?= e($key) ?>"><?= e($label) ?></option><?php endforeach; ?>
+                    </select>
+                </label>
+                <label>Tingkat peringatan
+                    <select name="severity" required>
+                        <?php foreach ($severities as $key => $label): ?><option value="<?= e($key) ?>"><?= e($label) ?></option><?php endforeach; ?>
+                    </select>
+                </label>
+                <label>Wilayah
+                    <select name="region_id" required>
+                        <option value="">Pilih wilayah</option>
+                        <?php foreach ($regions as $region): ?><option value="<?= (int) $region['id'] ?>"><?= e($region['name']) ?> (<?= e($region['code']) ?>)</option><?php endforeach; ?>
+                    </select>
+                </label>
+                <label>Lokasi / pos pantau<input name="location_name" maxlength="120" required placeholder="Nama lokasi kejadian"></label>
+                <label>Indikator pemicu<input name="trigger_indicator" maxlength="160" required placeholder="Contoh: tinggi muka air"></label>
+                <label>Nilai terukur<input name="trigger_value" maxlength="100" required placeholder="Nilai dan satuan"></label>
+                <label>Nilai ambang (opsional)<input name="threshold_value" maxlength="100" placeholder="Nilai ambang aktif"></label>
+                <label>Sumber laporan (opsional)<input name="source_label" maxlength="160" placeholder="Feed, sensor, atau pelapor terverifikasi"></label>
+                <p class="create-alert-disclaimer">Catatan manual dibuat sebagai laporan awal, bukan hasil evaluasi sensor otomatis. Nilai ambang operasional tetap harus disahkan oleh pemilik domain.</p>
+                <button class="filter-submit" type="submit">Simpan kejadian aktif</button>
+            </form>
+        </details>
+    <?php elseif ($canCreate && $regions === []): ?>
+        <div class="panel setup-required"><strong>Wilayah belum tersedia.</strong><p>Administrator perlu menyiapkan master wilayah sebelum kejadian dapat dicatat.</p></div>
+    <?php endif; ?>
+    <?php render_app_shell_end(); ?>
+    <?php
+}
+
+function render_history_page(
+    array $user,
+    array $events,
+    array $regions,
+    array $filters = []
+): void {
+    $closedCount = count_alert_events($user, 'closed');
+    $openCount = count_alert_events($user, 'open');
+    render_app_shell_start($user, 'history', 'Riwayat peringatan', 'MONITORING & PERINGATAN');
+    ?>
+    <div class="history-summary">
+        <div><span>Total catatan</span><strong><?= count($events) ?></strong></div>
+        <div><span>Kejadian selesai</span><strong><?= number_format($closedCount, 0, ',', '.') ?></strong></div>
+        <div><span>Masih aktif</span><strong><?= number_format($openCount, 0, ',', '.') ?></strong></div>
+        <?php
+        $exportQuery = $_GET;
+        $exportQuery['page'] = 'history';
+        $exportQuery['export'] = 'csv';
+        ?>
+        <a class="export-link" href="/?<?= e(http_build_query($exportQuery)) ?>">Unduh CSV <span aria-hidden="true">↓</span></a>
+    </div>
+    <div class="list-toolbar">
+        <div><h2>Riwayat kejadian</h2><p>Riwayat mencatat pemicu, perubahan tingkat, pengakuan, penugasan, catatan, dan alasan penutupan.</p></div>
+    </div>
+    <?php render_alert_filters($regions, $filters, true); ?>
+    <div class="result-count">Menampilkan <strong><?= count($events) ?></strong> kejadian yang cocok dengan filter dan cakupan akses.</div>
+    <?php if ($events === []): ?>
+        <section class="panel empty-alerts">
+            <span aria-hidden="true">◷</span><h2>Belum ada riwayat peringatan</h2>
+            <p>Kejadian aktif dan selesai yang berada dalam cakupan wilayah Anda akan tersimpan di sini.</p>
+        </section>
+    <?php else: ?>
+        <div class="alert-list">
+            <?php foreach ($events as $event): ?>
+                <?php render_alert_event_card($event, $user, true); ?>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+    <?php render_app_shell_end(); ?>
     <?php
 }
 

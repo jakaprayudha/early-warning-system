@@ -131,7 +131,7 @@ function user_has_permission(?array $user, string $permission): bool
     $permissions = [
         'dashboard' => ['master_data_manager', 'operator', 'observer', 'field_officer'],
         'manage_master_data' => ['master_data_manager'],
-        'handle_alerts' => ['operator'],
+        'handle_alerts' => ['operator', 'field_officer'],
         'view_reports' => ['operator', 'observer'],
         'handle_assignments' => ['field_officer'],
     ];
@@ -380,6 +380,390 @@ function update_user_access(
             }
             throw $error;
         }
+}
+
+function alert_hazards(): array
+{
+    return [
+        'weather' => 'Cuaca',
+        'tornado' => 'Tornado',
+        'river_flood' => 'Banjir sungai',
+        'coastal_tide' => 'Pasang surut pantai/muara',
+    ];
+}
+
+function alert_severities(): array
+{
+    return [
+        'watch' => 'Waspada',
+        'alert' => 'Siaga',
+        'warning' => 'Awas',
+    ];
+}
+
+function alert_event_by_id(int $eventId): ?array
+{
+    $statement = db()->prepare(
+        'SELECT events.*, regions.name AS region_name, regions.code AS region_code,
+                assigned.name AS assignee_name, creator.name AS creator_name,
+                acknowledger.name AS acknowledger_name
+         FROM alert_events AS events
+         JOIN regions ON regions.id = events.region_id
+         LEFT JOIN users AS assigned ON assigned.id = events.assigned_to
+         LEFT JOIN users AS creator ON creator.id = events.created_by
+         LEFT JOIN users AS acknowledger ON acknowledger.id = events.acknowledged_by
+         WHERE events.id = :id'
+    );
+    $statement->execute(['id' => $eventId]);
+    $event = $statement->fetch();
+
+    return $event ?: null;
+}
+
+function alert_event_is_visible(?array $user, int $eventId): bool
+{
+    $event = alert_event_by_id($eventId);
+    return $event !== null && user_has_region_access($user, (int) $event['region_id']);
+}
+
+function list_alert_events(array $user, array $filters = [], bool $activeOnly = false): array
+{
+    $conditions = [];
+    $params = [];
+    $regionIds = array_map(
+        static fn (array $region): int => (int) $region['id'],
+        user_regions($user)
+    );
+
+    if ($regionIds === []) {
+        return [];
+    }
+
+    $regionPlaceholders = [];
+    foreach ($regionIds as $index => $regionId) {
+        $key = ':region_' . $index;
+        $regionPlaceholders[] = $key;
+        $params[$key] = $regionId;
+    }
+    $conditions[] = 'events.region_id IN (' . implode(', ', $regionPlaceholders) . ')';
+
+    if ($activeOnly) {
+        $conditions[] = "events.handling_status = 'open'";
+        if ($user['role'] === 'field_officer') {
+            $conditions[] = 'events.assigned_to = :assigned_user';
+            $params[':assigned_user'] = (int) $user['id'];
+        }
+    } elseif (isset($filters['status']) && in_array($filters['status'], ['open', 'closed'], true)) {
+        $conditions[] = 'events.handling_status = :status';
+        $params[':status'] = $filters['status'];
+    }
+    if (isset($filters['hazard'])
+        && is_string($filters['hazard'])
+        && array_key_exists($filters['hazard'], alert_hazards())) {
+        $conditions[] = 'events.hazard_type = :hazard';
+        $params[':hazard'] = $filters['hazard'];
+    }
+    if (isset($filters['severity'])
+        && is_string($filters['severity'])
+        && array_key_exists($filters['severity'], alert_severities())) {
+        $conditions[] = 'events.severity = :severity';
+        $params[':severity'] = $filters['severity'];
+    }
+    if (isset($filters['region_id'])
+        && is_string($filters['region_id'])
+        && ctype_digit($filters['region_id'])) {
+        $regionId = (int) $filters['region_id'];
+        if (in_array($regionId, $regionIds, true)) {
+            $conditions[] = 'events.region_id = :selected_region';
+            $params[':selected_region'] = $regionId;
+        }
+    }
+    if (isset($filters['from'])
+        && is_string($filters['from'])
+        && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['from'])) {
+        $conditions[] = 'events.started_at >= :from_time';
+        $params[':from_time'] = strtotime((string) $filters['from'] . ' 00:00:00 UTC');
+    }
+    if (isset($filters['to'])
+        && is_string($filters['to'])
+        && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['to'])) {
+        $conditions[] = 'events.started_at < :to_time';
+        $params[':to_time'] = strtotime((string) $filters['to'] . ' +1 day 00:00:00 UTC');
+    }
+    $search = isset($filters['q']) && is_string($filters['q'])
+        ? trim($filters['q'])
+        : '';
+    if ($search !== '') {
+        $conditions[] = '(events.location_name LIKE :search
+            OR events.trigger_indicator LIKE :search
+            OR events.trigger_value LIKE :search
+            OR events.source_label LIKE :search
+            OR regions.name LIKE :search
+            OR regions.code LIKE :search)';
+        $params[':search'] = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $search) . '%';
+    }
+
+    $sql = 'SELECT events.*, regions.name AS region_name, regions.code AS region_code,
+                   assigned.name AS assignee_name, creator.name AS creator_name,
+                   acknowledger.name AS acknowledger_name
+            FROM alert_events AS events
+            JOIN regions ON regions.id = events.region_id
+            LEFT JOIN users AS assigned ON assigned.id = events.assigned_to
+            LEFT JOIN users AS creator ON creator.id = events.created_by
+            LEFT JOIN users AS acknowledger ON acknowledger.id = events.acknowledged_by
+            WHERE ' . implode(' AND ', $conditions)
+        . ' ORDER BY CASE events.severity WHEN "warning" THEN 1 WHEN "alert" THEN 2 ELSE 3 END,
+                    events.started_at DESC';
+    $statement = db()->prepare($sql);
+    $statement->execute($params);
+
+    return $statement->fetchAll();
+}
+
+function count_alert_events(array $user, string $status, ?string $severity = null): int
+{
+    $regionIds = array_map(
+        static fn (array $region): int => (int) $region['id'],
+        user_regions($user)
+    );
+    if ($regionIds === []) {
+        return 0;
+    }
+    $placeholders = implode(', ', array_fill(0, count($regionIds), '?'));
+    $sql = 'SELECT COUNT(*) FROM alert_events
+            WHERE handling_status = ? AND region_id IN (' . $placeholders . ')';
+    $params = [$status, ...$regionIds];
+    if ($severity !== null) {
+        $sql .= ' AND severity = ?';
+        $params[] = $severity;
+    }
+    if ($user['role'] === 'field_officer') {
+        $sql .= ' AND assigned_to = ?';
+        $params[] = (int) $user['id'];
+    }
+    $statement = db()->prepare($sql);
+    $statement->execute($params);
+
+    return (int) $statement->fetchColumn();
+}
+
+function alert_event_assignees(int $regionId): array
+{
+    $users = db()->query(
+        "SELECT id, name, role, status FROM users
+         WHERE status = 'active'
+           AND role IN ('system_admin', 'operator', 'field_officer')
+         ORDER BY name COLLATE NOCASE"
+    )->fetchAll();
+
+    return array_values(array_filter(
+        $users,
+        static fn (array $candidate): bool => user_has_region_access($candidate, $regionId)
+    ));
+}
+
+function alert_event_timeline(int $eventId): array
+{
+    $statement = db()->prepare(
+        'SELECT event_log.*, users.name AS actor_name
+         FROM alert_event_log AS event_log
+         LEFT JOIN users ON users.id = event_log.actor_id
+         WHERE event_log.event_id = :event_id
+         ORDER BY event_log.created_at DESC, event_log.id DESC'
+    );
+    $statement->execute(['event_id' => $eventId]);
+
+    return $statement->fetchAll();
+}
+
+function create_alert_event(array $event, int $actorId): int
+{
+    if (!array_key_exists($event['hazard_type'], alert_hazards())
+        || !array_key_exists($event['severity'], alert_severities())) {
+        throw new InvalidArgumentException('Jenis bahaya atau tingkat peringatan tidak valid.');
+    }
+    if (!user_has_region_access(
+        signed_in_user(),
+        (int) $event['region_id']
+    )) {
+        throw new InvalidArgumentException('Anda tidak memiliki akses ke wilayah tersebut.');
+    }
+
+    $now = time();
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $insert = $connection->prepare(
+            'INSERT INTO alert_events
+             (hazard_type, region_id, location_name, severity, trigger_indicator,
+              trigger_value, threshold_value, source_label, created_by, started_at,
+              created_at, updated_at)
+             VALUES (:hazard_type, :region_id, :location_name, :severity, :trigger_indicator,
+                     :trigger_value, :threshold_value, :source_label, :created_by, :started_at,
+                     :created_at, :updated_at)'
+        );
+        $insert->execute([
+            'hazard_type' => $event['hazard_type'],
+            'region_id' => $event['region_id'],
+            'location_name' => $event['location_name'],
+            'severity' => $event['severity'],
+            'trigger_indicator' => $event['trigger_indicator'],
+            'trigger_value' => $event['trigger_value'],
+            'threshold_value' => $event['threshold_value'],
+            'source_label' => $event['source_label'],
+            'created_by' => $actorId,
+            'started_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $eventId = (int) $connection->lastInsertId();
+        $log = $connection->prepare(
+            'INSERT INTO alert_event_log (event_id, actor_id, action, details, created_at)
+             VALUES (:event_id, :actor_id, :action, :details, :created_at)'
+        );
+        $log->execute([
+            'event_id' => $eventId,
+            'actor_id' => $actorId,
+            'action' => 'created',
+            'details' => 'Peringatan dicatat secara manual.',
+            'created_at' => $now,
+        ]);
+        $connection->commit();
+
+        return $eventId;
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function handle_alert_event(int $eventId, int $actorId, string $action, array $data = []): void
+{
+    $event = alert_event_by_id($eventId);
+    if ($event === null) {
+        throw new InvalidArgumentException('Kejadian tidak ditemukan.');
+    }
+    $actorStatement = db()->prepare('SELECT id, role, status FROM users WHERE id = :id');
+    $actorStatement->execute(['id' => $actorId]);
+    $actor = $actorStatement->fetch();
+    if (!$actor || $actor['status'] !== 'active'
+        || !user_has_region_access($actor, (int) $event['region_id'])) {
+        throw new InvalidArgumentException('Anda tidak memiliki akses ke kejadian ini.');
+    }
+
+    $isOperator = in_array($actor['role'], ['system_admin', 'operator'], true);
+    if (!$isOperator && !(
+        $actor['role'] === 'field_officer'
+        && (int) $event['assigned_to'] === $actorId
+        && $action === 'note'
+    )) {
+        throw new InvalidArgumentException('Peran Anda tidak diizinkan melakukan tindakan ini.');
+    }
+    if ($event['handling_status'] !== 'open') {
+        throw new InvalidArgumentException('Kejadian yang sudah ditutup tidak dapat diubah.');
+    }
+
+    $now = time();
+    $details = '';
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        if ($action === 'acknowledge') {
+            if ($event['acknowledged_at'] !== null) {
+                throw new InvalidArgumentException('Kejadian ini sudah diakui.');
+            }
+            $update = $connection->prepare(
+                'UPDATE alert_events SET acknowledged_by = :actor, acknowledged_at = :now,
+                 updated_at = :now WHERE id = :id AND handling_status = "open"'
+            );
+            $update->execute(['actor' => $actorId, 'now' => $now, 'id' => $eventId]);
+            $details = 'Kejadian diakui oleh petugas.';
+        } elseif ($action === 'assign') {
+            $assigneeId = (int) ($data['assignee_id'] ?? 0);
+            if ($assigneeId < 1) {
+                throw new InvalidArgumentException('Pilih petugas penanggung jawab.');
+            }
+            $assigneeStatement = db()->prepare(
+                "SELECT id, role, status FROM users
+                 WHERE id = :id AND status = 'active'
+                   AND role IN ('system_admin', 'operator', 'field_officer')"
+            );
+            $assigneeStatement->execute(['id' => $assigneeId]);
+            $assignee = $assigneeStatement->fetch();
+            if (!$assignee || !user_has_region_access($assignee, (int) $event['region_id'])) {
+                throw new InvalidArgumentException('Petugas harus aktif dan memiliki cakupan wilayah kejadian.');
+            }
+            $update = $connection->prepare(
+                'UPDATE alert_events SET assigned_to = :assignee, updated_at = :now
+                 WHERE id = :id AND handling_status = "open"'
+            );
+            $update->execute(['assignee' => $assigneeId, 'now' => $now, 'id' => $eventId]);
+            $details = 'Penanggung jawab diubah menjadi pengguna #' . $assignee['id'] . '.';
+        } elseif ($action === 'escalate') {
+            $nextSeverity = match ($event['severity']) {
+                'watch' => 'alert',
+                'alert' => 'warning',
+                default => null,
+            };
+            if ($nextSeverity === null) {
+                throw new InvalidArgumentException('Peringatan sudah berada pada tingkat tertinggi.');
+            }
+            $update = $connection->prepare(
+                'UPDATE alert_events SET severity = :severity, updated_at = :now
+                 WHERE id = :id AND handling_status = "open"'
+            );
+            $update->execute(['severity' => $nextSeverity, 'now' => $now, 'id' => $eventId]);
+            $details = 'Tingkat peringatan dinaikkan menjadi ' . alert_severities()[$nextSeverity] . '.';
+        } elseif ($action === 'close') {
+            $reason = trim((string) ($data['reason'] ?? ''));
+            if ($reason === '') {
+                throw new InvalidArgumentException('Alasan penutupan wajib diisi.');
+            }
+            $update = $connection->prepare(
+                'UPDATE alert_events SET handling_status = "closed", closed_at = :now,
+                 close_reason = :reason, updated_at = :now
+                 WHERE id = :id AND handling_status = "open"'
+            );
+            $update->execute([
+                'now' => $now,
+                'reason' => $reason,
+                'id' => $eventId,
+            ]);
+            $details = $reason;
+        } elseif ($action === 'note') {
+            $note = trim((string) ($data['note'] ?? ''));
+            if ($note === '') {
+                throw new InvalidArgumentException('Catatan tidak boleh kosong.');
+            }
+            $update = $connection->prepare(
+                'UPDATE alert_events SET updated_at = :now WHERE id = :id'
+            );
+            $update->execute(['now' => $now, 'id' => $eventId]);
+            $details = $note;
+        } else {
+            throw new InvalidArgumentException('Tindakan kejadian tidak dikenal.');
+        }
+
+        $log = $connection->prepare(
+            'INSERT INTO alert_event_log (event_id, actor_id, action, details, created_at)
+             VALUES (:event_id, :actor_id, :action, :details, :created_at)'
+        );
+        $log->execute([
+            'event_id' => $eventId,
+            'actor_id' => $actorId,
+            'action' => $action,
+            'details' => $details,
+            'created_at' => $now,
+        ]);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
 }
 
 function send_password_reset(string $email, string $name, string $token): bool
