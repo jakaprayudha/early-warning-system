@@ -82,3 +82,5 @@ Akses dibatasi oleh cakupan wilayah pengguna, dan setiap perubahan beserta alasa
 ```bash
 sqlite3 storage/db_ews.sqlite < database/locations_demo.sql
 ```
+
+Tab **Peta** menampilkan lokasi pada peta interaktif (seret, scroll/tombol untuk zoom, tombol ⤢ untuk menampilkan semua lokasi) dengan ikon dan warna berbeda per tipe alat/lokasi, popup detail, dan daftar lokasi di samping. Ubin peta dimuat dari `tile.openstreetmap.org` (diizinkan pada CSP `img-src`); tanpa internet, peta tetap menampilkan penanda pada latar polos.

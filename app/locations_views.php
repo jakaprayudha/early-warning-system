@@ -54,7 +54,8 @@ function render_location_fields(?array $location, array $labels, array $hazards)
 
 function render_locations_page(array $user, ?string $message, ?string $error): void
 {
-    $tab = ($_GET['tab'] ?? 'locations') === 'regions' ? 'regions' : 'locations';
+    $requestedTab = $_GET['tab'] ?? 'locations';
+    $tab = in_array($requestedTab, ['regions', 'maps'], true) ? $requestedTab : 'locations';
     $regions = list_managed_regions($user);
     $labels = region_path_labels($regions);
     $hazards = alert_hazards();
@@ -70,6 +71,7 @@ function render_locations_page(array $user, ?string $message, ?string $error): v
         <nav class="tab-bar" aria-label="Master wilayah">
             <a href="/?page=dashboard&amp;section=locations&amp;tab=locations" <?= $tab === 'locations' ? 'class="active" aria-current="page"' : '' ?>>Lokasi pantau</a>
             <a href="/?page=dashboard&amp;section=locations&amp;tab=regions" <?= $tab === 'regions' ? 'class="active" aria-current="page"' : '' ?>>Hierarki wilayah</a>
+            <a href="/?page=dashboard&amp;section=locations&amp;tab=maps" <?= $tab === 'maps' ? 'class="active" aria-current="page"' : '' ?>>Peta</a>
         </nav>
 
     <?php if ($tab === 'regions'): ?>
@@ -160,6 +162,8 @@ function render_locations_page(array $user, ?string $message, ?string $error): v
             </div>
             <?php endif; ?>
         </section>
+    <?php elseif ($tab === 'maps'): ?>
+        <?php render_locations_map($user, $labels, $hazards); ?>
     <?php else: ?>
         <?php
         $filters = [
@@ -244,5 +248,93 @@ function render_locations_page(array $user, ?string $message, ?string $error): v
         </section>
     <?php endif; ?>
     </div>
+    <?php
+}
+
+function location_map_styles(): array
+{
+    return [
+        'station' => ['label' => 'Stasiun pengamatan', 'color' => '#2F7FC1'],
+        'river_post' => ['label' => 'Pos sungai', 'color' => '#D18A32'],
+        'coastal_post' => ['label' => 'Pos pantai/muara', 'color' => '#1F9A9C'],
+        'weather_station' => ['label' => 'Stasiun cuaca', 'color' => '#8C63B8'],
+        'village' => ['label' => 'Permukiman/desa', 'color' => '#4C9A5B'],
+        'other' => ['label' => 'Lainnya', 'color' => '#6B7C85'],
+    ];
+}
+
+function render_locations_map(array $user, array $labels, array $hazards): void
+{
+    $filters = [
+        'region_id' => is_string($_GET['region_id'] ?? null) ? (int) $_GET['region_id'] : 0,
+        'hazard' => is_string($_GET['hazard'] ?? null) ? $_GET['hazard'] : '',
+        'status' => is_string($_GET['status'] ?? null) ? $_GET['status'] : '',
+    ];
+    $locations = list_monitoring_locations($user, $filters);
+    $points = [];
+    foreach ($locations as $location) {
+        $points[] = [
+            'id' => (int) $location['id'],
+            'code' => $location['code'],
+            'name' => $location['name'],
+            'lat' => (float) $location['latitude'],
+            'lng' => (float) $location['longitude'],
+            'type' => isset(location_map_styles()[$location['location_type']]) ? $location['location_type'] : 'other',
+            'active' => (int) $location['is_active'] === 1,
+            'region' => $labels[(int) $location['region_id']] ?? $location['region_name'],
+            'elevation' => $location['elevation_m'],
+            'datum' => $location['vertical_datum'],
+            'hazards' => array_map(static fn($code) => $hazards[$code] ?? (string) $code, $location['hazards']),
+        ];
+    }
+    $styles = location_map_styles();
+    ?>
+    <section class="hazard-types-section">
+        <div class="section-heading"><div><p class="eyebrow">PETA</p><h2>Sebaran lokasi <span><?= count($points) ?></span></h2></div></div>
+        <form class="location-filter map-filter" method="get" action="/">
+            <input type="hidden" name="page" value="dashboard">
+            <input type="hidden" name="section" value="locations">
+            <input type="hidden" name="tab" value="maps">
+            <select name="region_id" aria-label="Wilayah"><option value="">Semua wilayah</option><?php render_region_options($labels, $filters['region_id'] ?: null); ?></select>
+            <select name="hazard" aria-label="Jenis bahaya"><option value="">Semua bahaya</option><?php foreach ($hazards as $code => $name): ?><option value="<?= e((string) $code) ?>" <?= $filters['hazard'] === $code ? 'selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?></select>
+            <select name="status" aria-label="Status"><option value="">Semua status</option><option value="active" <?= $filters['status'] === 'active' ? 'selected' : '' ?>>Aktif</option><option value="inactive" <?= $filters['status'] === 'inactive' ? 'selected' : '' ?>>Nonaktif</option></select>
+            <button class="save-button" type="submit">Terapkan</button>
+        </form>
+        <div class="location-map-layout">
+            <div class="panel location-map-panel">
+                <div class="location-map" data-location-map data-points="<?= e(json_encode($points, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>" data-styles="<?= e(json_encode($styles, JSON_THROW_ON_ERROR)) ?>" role="application" aria-label="Peta lokasi pantau" tabindex="0">
+                    <div class="map-tiles" data-map-tiles></div>
+                    <div class="map-markers" data-map-markers></div>
+                    <div class="map-controls">
+                        <button type="button" data-map-zoom="1" aria-label="Perbesar">+</button>
+                        <button type="button" data-map-zoom="-1" aria-label="Perkecil">−</button>
+                        <button type="button" data-map-fit aria-label="Tampilkan semua lokasi">⤢</button>
+                    </div>
+                    <div class="map-attribution">© OpenStreetMap contributors</div>
+                    <div class="map-coords" data-map-coords>Arahkan kursor ke peta</div>
+                </div>
+                <div class="map-legend" aria-label="Legenda ikon">
+                    <?php foreach ($styles as $key => $style): ?>
+                        <span><i class="map-pin-sample" data-map-legend="<?= e($key) ?>"></i><?= e($style['label']) ?></span>
+                    <?php endforeach; ?>
+                    <span><i class="map-pin-sample inactive"></i>Nonaktif</span>
+                </div>
+            </div>
+            <aside class="panel location-map-list" aria-label="Daftar lokasi">
+                <?php if ($points === []): ?>
+                    <p class="scope-hint">Tidak ada lokasi untuk ditampilkan.</p>
+                <?php else: ?>
+                    <ul>
+                        <?php foreach ($points as $point): ?>
+                            <li><button type="button" data-map-focus="<?= (int) $point['id'] ?>">
+                                <span class="map-list-icon" data-map-legend="<?= e($point['type']) ?>"></span>
+                                <span><strong><?= e($point['name']) ?></strong><small><?= e(number_format($point['lat'], 5, '.', '')) ?>, <?= e(number_format($point['lng'], 5, '.', '')) ?></small></span>
+                            </button></li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </aside>
+        </div>
+    </section>
     <?php
 }
