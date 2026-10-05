@@ -390,6 +390,12 @@ function render_dashboard(array $user, string $section = 'overview'): void
 
     if ($section === 'overview') {
         render_dashboard_overview($user);
+    } elseif ($section === 'hazards') {
+        render_hazard_types_page(
+            list_hazard_types(),
+            flash('message'),
+            flash('error')
+        );
     } else {
         render_dashboard_placeholder($section, $title);
     }
@@ -531,7 +537,6 @@ function render_dashboard_placeholder(string $section, string $title): void
     $descriptions = [
         'alerts' => 'Daftar kejadian aktif, prioritas, indikator pemicu, umur data, dan status penanganan.',
         'history' => 'Riwayat peringatan dapat ditelusuri dan difilter setelah data kejadian tersedia.',
-        'hazards' => 'Konfigurasi empat jenis bahaya: cuaca, tornado, banjir sungai, dan pasang surut pantai/muara.',
         'locations' => 'Kelola hierarki wilayah serta lokasi pantau, koordinat, geometri, zona waktu, dan cakupan bahaya.',
         'sensors' => 'Daftarkan sensor atau feed, parameter, lokasi, metode koneksi, heartbeat, dan kesehatan sumber.',
         'parameters' => 'Kelola parameter, satuan, tipe nilai, rentang valid, dan frekuensi pengukuran.',
@@ -548,7 +553,6 @@ function render_dashboard_placeholder(string $section, string $title): void
         <div class="module-intro-mark" aria-hidden="true"><?= e(match ($section) {
             'alerts' => '⌁',
             'history' => '◷',
-            'hazards' => '◇',
             'locations' => '⌖',
             'sensors' => '◉',
             'parameters' => '≋',
@@ -566,6 +570,84 @@ function render_dashboard_placeholder(string $section, string $title): void
         <div class="module-status-heading"><span class="status-dot muted-dot"></span><div><strong>Modul belum terhubung ke data operasional</strong><p>Menu dan alur modul sudah disiapkan sesuai PRD. Pengelolaan data dan integrasi akan dibangun pada tahap berikutnya.</p></div></div>
         <a class="panel-link" href="/?page=dashboard">Kembali ke ringkasan <span aria-hidden="true">→</span></a>
     </section>
+    <?php
+}
+
+function render_hazard_types_page(array $hazardTypes, ?string $message, ?string $error): void
+{
+    ?>
+    <div class="hazard-admin">
+        <p class="dashboard-message">Kelola kode, informasi, tampilan, satuan, serta status jenis bahaya. Perubahan dicatat dalam audit konfigurasi.</p>
+        <?php if ($message !== null): ?><div class="notice" role="status"><?= e($message) ?></div><?php endif; ?>
+        <?php if ($error !== null): ?><div class="admin-error" role="alert"><?= e($error) ?></div><?php endif; ?>
+
+        <section class="panel hazard-create-panel">
+            <div class="panel-heading"><div><h2>Tambah jenis bahaya</h2><p>Kode bersifat tetap setelah jenis dibuat.</p></div></div>
+            <form class="hazard-form" method="post" action="/?page=dashboard&amp;section=hazards">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="create">
+                <label>Kode unik<input name="code" maxlength="32" pattern="[A-Za-z][A-Za-z0-9_\x2D]{1,31}" placeholder="contoh: longsor" required></label>
+                <label>Nama<input name="name" maxlength="100" placeholder="Nama jenis bahaya" required></label>
+                <label>Ikon<input name="icon" maxlength="8" placeholder="◇" required></label>
+                <label>Warna<input name="color" type="color" value="#27856e" required></label>
+                <label>Satuan default<input name="default_unit" maxlength="24" placeholder="mm/jam"></label>
+                <label class="hazard-description">Deskripsi<textarea name="description" maxlength="500" rows="2" placeholder="Ringkasan jenis bahaya"></textarea></label>
+                <label class="hazard-active"><input type="checkbox" name="is_active" value="1" checked> Aktif</label>
+                <label class="hazard-reason">Alasan perubahan<input name="reason" maxlength="500" required placeholder="Dasar penambahan jenis bahaya"></label>
+                <button class="save-button" type="submit">Tambah jenis bahaya</button>
+            </form>
+        </section>
+
+        <section class="hazard-types-section" aria-labelledby="hazard-types-title">
+            <div class="section-heading">
+                <div><p class="eyebrow">KATALOG</p><h2 id="hazard-types-title">Jenis bahaya <span><?= count($hazardTypes) ?></span></h2></div>
+            </div>
+            <?php if ($hazardTypes === []): ?>
+                <div class="panel empty-alerts"><h2>Belum ada jenis bahaya</h2><p>Tambahkan jenis bahaya untuk menggunakannya pada pencatatan kejadian.</p></div>
+            <?php else: ?>
+                <div class="hazard-type-list">
+                    <?php foreach ($hazardTypes as $hazard): ?>
+                        <?php $code = (string) $hazard['code']; ?>
+                        <article class="panel hazard-type-card">
+                            <div class="hazard-type-heading">
+                                <span class="hazard-icon" aria-hidden="true"><?= e($hazard['icon']) ?></span>
+                                <div><h3><?= e($hazard['name']) ?></h3><p><code><?= e($code) ?></code> · <?= (int) $hazard['event_count'] ?> kejadian terkait</p></div>
+                                <span class="status-badge <?= (int) $hazard['is_active'] === 1 ? 'status-active' : 'status-suspended' ?>"><?= (int) $hazard['is_active'] === 1 ? 'Aktif' : 'Nonaktif' ?></span>
+                            </div>
+                            <form id="hazard-update-<?= e($code) ?>" class="hazard-form" method="post" action="/?page=dashboard&amp;section=hazards">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="update">
+                                <input type="hidden" name="code" value="<?= e($code) ?>">
+                                <label>Kode unik<input value="<?= e($code) ?>" disabled></label>
+                                <label>Nama<input name="name" maxlength="100" value="<?= e($hazard['name']) ?>" required></label>
+                                <label>Ikon<input name="icon" maxlength="8" value="<?= e($hazard['icon']) ?>" required></label>
+                                <label>Warna<input name="color" type="color" value="<?= e($hazard['color']) ?>" required></label>
+                                <label>Satuan default<input name="default_unit" maxlength="24" value="<?= e($hazard['default_unit']) ?>"></label>
+                                <label class="hazard-description">Deskripsi<textarea name="description" maxlength="500" rows="2"><?= e($hazard['description']) ?></textarea></label>
+                                <label class="hazard-active"><input type="checkbox" name="is_active" value="1" <?= (int) $hazard['is_active'] === 1 ? 'checked' : '' ?>> Aktif</label>
+                                <label class="hazard-reason">Alasan perubahan<input name="reason" maxlength="500" required placeholder="Wajib diisi untuk audit"></label>
+                            </form>
+                            <div class="hazard-form-actions">
+                                <button class="save-button" type="submit" form="hazard-update-<?= e($code) ?>">Simpan perubahan</button>
+                                <?php if ((int) $hazard['event_count'] === 0): ?>
+                                    <form class="hazard-delete-form" method="post" action="/?page=dashboard&amp;section=hazards">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="code" value="<?= e($code) ?>">
+                                        <label>Alasan penghapusan<input name="reason" maxlength="500" required placeholder="Wajib diisi untuk audit"></label>
+                                        <button class="hazard-delete-button" type="submit">Hapus jenis bahaya</button>
+                                    </form>
+                                <?php else: ?>
+                                    <p class="hazard-delete-hint">Tidak dapat dihapus karena sudah memiliki kejadian. Nonaktifkan untuk menghentikan penggunaan baru.</p>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+        <p class="scope-hint">Jenis nonaktif tetap tampil pada riwayat lama tetapi tidak tersedia untuk kejadian baru. Penghapusan hanya diizinkan jika belum pernah digunakan.</p>
+    </div>
     <?php
 }
 
@@ -779,7 +861,7 @@ function render_alerts_page(
     array $filters = []
 ): void {
     $canCreate = in_array($user['role'], ['system_admin', 'operator'], true);
-    $hazards = alert_hazards();
+    $hazards = alert_hazards(true);
     $severities = alert_severities();
     $openCount = count_alert_events($user, 'open');
     $watchCount = count_alert_events($user, 'open', 'watch');

@@ -82,6 +82,43 @@ function db(): PDO
         )'
     );
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS hazard_types (
+            code TEXT PRIMARY KEY COLLATE NOCASE,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT "",
+            icon TEXT NOT NULL DEFAULT "",
+            color TEXT NOT NULL DEFAULT "#27856E",
+            default_unit TEXT NOT NULL DEFAULT "",
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS hazard_type_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hazard_code TEXT NOT NULL,
+            actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            action TEXT NOT NULL CHECK (action IN ("created", "updated", "deleted")),
+            old_values TEXT NOT NULL DEFAULT "",
+            new_values TEXT NOT NULL DEFAULT "",
+            reason TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'INSERT INTO hazard_types
+         (code, name, description, icon, color, default_unit, is_active, created_at, updated_at)
+         VALUES
+         ("weather", "Cuaca", "Cuaca ekstrem dan kondisi meteorologi.", "☁", "#3986C6", "mm/jam", 1, strftime("%s", "now"), strftime("%s", "now")),
+         ("tornado", "Tornado", "Angin puting beliung dan pusaran angin.", "↻", "#8C63B8", "km/jam", 1, strftime("%s", "now"), strftime("%s", "now")),
+         ("river_flood", "Banjir sungai", "Kenaikan muka air dan luapan sungai.", "≋", "#D18A32", "cm", 1, strftime("%s", "now"), strftime("%s", "now")),
+         ("coastal_tide", "Pasang surut pantai/muara", "Pasang tinggi dan genangan pesisir atau muara.", "≈", "#278F91", "m", 1, strftime("%s", "now"), strftime("%s", "now"))
+         ON CONFLICT(code) DO NOTHING'
+    );
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS access_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -107,8 +144,8 @@ function db(): PDO
     $connection->exec(
         'CREATE TABLE IF NOT EXISTS alert_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            hazard_type TEXT NOT NULL
-                CHECK (hazard_type IN ("weather", "tornado", "river_flood", "coastal_tide")),
+            hazard_type TEXT NOT NULL REFERENCES hazard_types(code)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
             region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
             location_name TEXT NOT NULL,
             severity TEXT NOT NULL CHECK (severity IN ("watch", "alert", "warning")),
@@ -129,6 +166,62 @@ function db(): PDO
             updated_at INTEGER NOT NULL
         )'
     );
+    $eventTableSql = $connection->query(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alert_events'"
+    )->fetchColumn();
+    if (is_string($eventTableSql) && str_contains($eventTableSql, 'CHECK (hazard_type IN')) {
+        $connection->exec('PRAGMA foreign_keys = OFF');
+        $connection->beginTransaction();
+        try {
+            $connection->exec(
+                'CREATE TABLE alert_events_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hazard_type TEXT NOT NULL REFERENCES hazard_types(code)
+                        ON UPDATE CASCADE ON DELETE RESTRICT,
+                    region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+                    location_name TEXT NOT NULL,
+                    severity TEXT NOT NULL CHECK (severity IN ("watch", "alert", "warning")),
+                    trigger_indicator TEXT NOT NULL,
+                    trigger_value TEXT NOT NULL,
+                    threshold_value TEXT NOT NULL DEFAULT "",
+                    source_label TEXT NOT NULL DEFAULT "",
+                    handling_status TEXT NOT NULL DEFAULT "open"
+                        CHECK (handling_status IN ("open", "closed")),
+                    acknowledged_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    acknowledged_at INTEGER,
+                    assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    started_at INTEGER NOT NULL,
+                    closed_at INTEGER,
+                    close_reason TEXT NOT NULL DEFAULT "",
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )'
+            );
+            $connection->exec(
+                'INSERT INTO alert_events_new
+                 (id, hazard_type, region_id, location_name, severity, trigger_indicator,
+                  trigger_value, threshold_value, source_label, handling_status,
+                  acknowledged_by, acknowledged_at, assigned_to, created_by, started_at,
+                  closed_at, close_reason, created_at, updated_at)
+                 SELECT id, hazard_type, region_id, location_name, severity, trigger_indicator,
+                        trigger_value, threshold_value, source_label, handling_status,
+                        acknowledged_by, acknowledged_at, assigned_to, created_by, started_at,
+                        closed_at, close_reason, created_at, updated_at
+                 FROM alert_events'
+            );
+            $connection->exec('DROP TABLE alert_events');
+            $connection->exec('ALTER TABLE alert_events_new RENAME TO alert_events');
+            $connection->commit();
+        } catch (Throwable $error) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+            throw $error;
+        } finally {
+            $connection->exec('PRAGMA foreign_keys = ON');
+        }
+    }
     $connection->exec(
         'CREATE INDEX IF NOT EXISTS alert_events_status_region
          ON alert_events(handling_status, region_id, started_at)'

@@ -382,14 +382,169 @@ function update_user_access(
         }
 }
 
-function alert_hazards(): array
+function alert_hazards(bool $activeOnly = false): array
 {
-    return [
-        'weather' => 'Cuaca',
-        'tornado' => 'Tornado',
-        'river_flood' => 'Banjir sungai',
-        'coastal_tide' => 'Pasang surut pantai/muara',
+    $sql = 'SELECT code, name FROM hazard_types';
+    if ($activeOnly) {
+        $sql .= ' WHERE is_active = 1';
+    }
+    $sql .= ' ORDER BY name COLLATE NOCASE';
+
+    $hazards = [];
+    foreach (db()->query($sql)->fetchAll() as $hazard) {
+        $hazards[$hazard['code']] = $hazard['name'];
+    }
+
+    return $hazards;
+}
+
+function list_hazard_types(): array
+{
+    return db()->query(
+        'SELECT hazard_types.*,
+                (SELECT COUNT(*) FROM alert_events
+                 WHERE alert_events.hazard_type = hazard_types.code) AS event_count
+         FROM hazard_types
+         ORDER BY is_active DESC, name COLLATE NOCASE'
+    )->fetchAll();
+}
+
+function record_hazard_type_change(
+    string $code,
+    int $actorId,
+    string $action,
+    array $oldValues,
+    array $newValues,
+    string $reason
+): void {
+    $statement = db()->prepare(
+        'INSERT INTO hazard_type_audit_log
+         (hazard_code, actor_id, action, old_values, new_values, reason, created_at)
+         VALUES (:code, :actor, :action, :old_values, :new_values, :reason, :created_at)'
+    );
+    $statement->execute([
+        'code' => $code,
+        'actor' => $actorId,
+        'action' => $action,
+        'old_values' => $oldValues === [] ? '' : json_encode($oldValues, JSON_THROW_ON_ERROR),
+        'new_values' => $newValues === [] ? '' : json_encode($newValues, JSON_THROW_ON_ERROR),
+        'reason' => $reason,
+        'created_at' => time(),
+    ]);
+}
+
+function create_hazard_type(array $hazard, int $actorId, string $reason): void
+{
+    $now = time();
+    $values = [
+        'code' => $hazard['code'],
+        'name' => $hazard['name'],
+        'description' => $hazard['description'],
+        'icon' => $hazard['icon'],
+        'color' => $hazard['color'],
+        'default_unit' => $hazard['default_unit'],
+        'is_active' => $hazard['is_active'] ? 1 : 0,
     ];
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $insert = $connection->prepare(
+            'INSERT INTO hazard_types
+             (code, name, description, icon, color, default_unit, is_active,
+              created_by, updated_by, created_at, updated_at)
+             VALUES (:code, :name, :description, :icon, :color, :default_unit, :is_active,
+                     :actor, :actor, :created_at, :updated_at)'
+        );
+        $insert->execute($values + [
+            'actor' => $actorId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        record_hazard_type_change($hazard['code'], $actorId, 'created', [], $values, $reason);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function update_hazard_type(array $hazard, int $actorId, string $reason): void
+{
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $find = $connection->prepare('SELECT * FROM hazard_types WHERE code = :code');
+        $find->execute(['code' => $hazard['code']]);
+        $oldValues = $find->fetch();
+        if (!$oldValues) {
+            throw new InvalidArgumentException('Jenis bahaya tidak ditemukan.');
+        }
+        $newValues = [
+            'code' => $hazard['code'],
+            'name' => $hazard['name'],
+            'description' => $hazard['description'],
+            'icon' => $hazard['icon'],
+            'color' => $hazard['color'],
+            'default_unit' => $hazard['default_unit'],
+            'is_active' => $hazard['is_active'] ? 1 : 0,
+        ];
+        $update = $connection->prepare(
+            'UPDATE hazard_types
+             SET name = :name, description = :description, icon = :icon, color = :color,
+                 default_unit = :default_unit, is_active = :is_active,
+                 updated_by = :actor, updated_at = :updated_at
+             WHERE code = :code'
+        );
+        $update->execute($newValues + ['actor' => $actorId, 'updated_at' => time()]);
+        record_hazard_type_change(
+            $hazard['code'],
+            $actorId,
+            'updated',
+            $oldValues,
+            $newValues,
+            $reason
+        );
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function delete_hazard_type(string $code, int $actorId, string $reason): void
+{
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $find = $connection->prepare('SELECT * FROM hazard_types WHERE code = :code');
+        $find->execute(['code' => $code]);
+        $oldValues = $find->fetch();
+        if (!$oldValues) {
+            throw new InvalidArgumentException('Jenis bahaya tidak ditemukan.');
+        }
+        $usage = $connection->prepare(
+            'SELECT COUNT(*) FROM alert_events WHERE hazard_type = :code'
+        );
+        $usage->execute(['code' => $code]);
+        if ((int) $usage->fetchColumn() > 0) {
+            throw new InvalidArgumentException(
+                'Jenis bahaya sudah dipakai pada kejadian. Nonaktifkan jenis ini agar riwayat tetap terjaga.'
+            );
+        }
+        record_hazard_type_change($code, $actorId, 'deleted', $oldValues, [], $reason);
+        $delete = $connection->prepare('DELETE FROM hazard_types WHERE code = :code');
+        $delete->execute(['code' => $code]);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
 }
 
 function alert_severities(): array
@@ -578,7 +733,7 @@ function alert_event_timeline(int $eventId): array
 
 function create_alert_event(array $event, int $actorId): int
 {
-    if (!array_key_exists($event['hazard_type'], alert_hazards())
+    if (!array_key_exists($event['hazard_type'], alert_hazards(true))
         || !array_key_exists($event['severity'], alert_severities())) {
         throw new InvalidArgumentException('Jenis bahaya atau tingkat peringatan tidak valid.');
     }

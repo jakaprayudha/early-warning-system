@@ -85,6 +85,93 @@ if ($page === 'history'
     render_access_denied();
     exit;
 }
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'hazards'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'hazards');
+        exit;
+    }
+
+    try {
+        $action = post_value('action');
+        $code = strtolower(trim(post_value('code')));
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan perubahan wajib diisi (3–500 karakter).');
+        }
+
+        if ($action === 'delete') {
+            if (!preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $code)) {
+                throw new InvalidArgumentException('Kode jenis bahaya tidak valid.');
+            }
+            delete_hazard_type($code, (int) $user['id'], $reason);
+            flash('message', 'Jenis bahaya berhasil dihapus dan perubahannya dicatat.');
+        } elseif (in_array($action, ['create', 'update'], true)) {
+            if ($action === 'create' && !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $code)) {
+                throw new InvalidArgumentException(
+                    'Kode harus 2–32 karakter, diawali huruf, dan hanya berisi huruf, angka, _ atau -.'
+                );
+            }
+            if ($action === 'update' && !preg_match('/^[a-z][a-z0-9_-]{1,31}$/', $code)) {
+                throw new InvalidArgumentException('Kode jenis bahaya tidak valid.');
+            }
+            $hazard = [
+                'code' => $code,
+                'name' => trim(post_value('name')),
+                'description' => trim(post_value('description')),
+                'icon' => trim(post_value('icon')),
+                'color' => strtoupper(trim(post_value('color'))),
+                'default_unit' => trim(post_value('default_unit')),
+                'is_active' => post_value('is_active') === '1',
+            ];
+            $nameLength = preg_match_all('/./us', $hazard['name']);
+            $descriptionLength = preg_match_all('/./us', $hazard['description']);
+            $iconLength = preg_match_all('/./us', $hazard['icon']);
+            $unitLength = preg_match_all('/./us', $hazard['default_unit']);
+            if ($nameLength === false || $nameLength < 2 || $nameLength > 100) {
+                throw new InvalidArgumentException('Nama jenis bahaya wajib diisi (2–100 karakter).');
+            }
+            if ($descriptionLength === false || $descriptionLength > 500) {
+                throw new InvalidArgumentException('Deskripsi maksimal 500 karakter.');
+            }
+            if ($iconLength === false || $iconLength < 1 || $iconLength > 8) {
+                throw new InvalidArgumentException('Ikon wajib diisi dan maksimal 8 karakter.');
+            }
+            if (!preg_match('/^#[0-9A-F]{6}$/', $hazard['color'])) {
+                throw new InvalidArgumentException('Warna harus menggunakan format HEX, misalnya #27856E.');
+            }
+            if ($unitLength === false || $unitLength > 24) {
+                throw new InvalidArgumentException('Satuan maksimal 24 karakter.');
+            }
+            if ($action === 'create') {
+                create_hazard_type($hazard, (int) $user['id'], $reason);
+                flash('message', 'Jenis bahaya berhasil ditambahkan.');
+            } else {
+                update_hazard_type($hazard, (int) $user['id'], $reason);
+                flash('message', 'Jenis bahaya berhasil diperbarui.');
+            }
+        } else {
+            throw new InvalidArgumentException('Tindakan jenis bahaya tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'Kode jenis bahaya tersebut sudah digunakan.');
+    }
+    redirect_to('/?page=dashboard&section=hazards');
+}
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {
         http_response_code(400);

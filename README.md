@@ -44,7 +44,7 @@ Untuk mengisi akun dummy lokal sesuai contoh, jalankan `database/seed_admin.sql`
 - Perubahan peran, status akun, cakupan, pembuatan wilayah, dan pembuatan administrator pertama dicatat pada tabel `access_audit_log`. Alasan wajib diisi untuk perubahan melalui antarmuka admin.
 - Sistem mencegah administrator menonaktifkan administrator aktif terakhir.
 - Dashboard pasca-login menyediakan sidebar sesuai peran untuk pemantauan, kejadian, riwayat, master data bahaya/lokasi/sensor/parameter/ambang/aturan/penerima, integrasi, laporan, kesehatan sistem, pengguna, dan audit.
-- Ringkasan dashboard, kejadian aktif, riwayat peringatan, dan halaman menu sudah tersedia. Peta dan metrik sensor belum terhubung ke data operasional; layar master selain pengguna/wilayah masih menunggu implementasi.
+- Ringkasan dashboard, kejadian aktif, riwayat peringatan, pengelolaan jenis bahaya, serta administrasi pengguna/wilayah sudah tersedia. Peta dan metrik sensor belum terhubung ke data operasional; master lokasi, sensor, parameter, dan aturan masih menunggu implementasi.
 - Kejadian aktif mendukung laporan manual terkontrol, pengakuan, penetapan petugas, eskalasi Waspada → Siaga → Awas, catatan tindakan, penutupan beralasan, filter, dan riwayat tindakan. Riwayat peringatan mendukung filter dan ekspor CSV yang dibatasi cakupan wilayah.
 - Peringatan otomatis belum dihasilkan karena ingest sensor dan mesin evaluasi aturan belum dibuat. Laporan manual ditandai sebagai laporan awal, bukan hasil evaluasi sensor.
 
@@ -57,5 +57,15 @@ sqlite3 storage/db_ews.sqlite < database/monitoring_demo.sql
 ```
 
 Skrip membuat tabel kejadian/kronologi bila belum tersedia dan aman dijalankan ulang tanpa menggandakan contoh. Semua catatan demo memakai sumber `DEMO-SEED:` agar mudah dikenali. Administrator sistem dapat melihat seluruh wilayah; pengguna lain hanya melihat data yang berada dalam cakupan wilayah akunnya.
+
+## Jenis bahaya
+
+Katalog jenis bahaya disimpan di tabel `hazard_types` dan otomatis disiapkan aplikasi saat startup. Untuk menyiapkan katalog empat jenis EWS secara manual di SQLite:
+
+```sh
+sqlite3 storage/db_ews.sqlite < database/hazard_types.sql
+```
+
+Menu **Master data → Jenis bahaya** menyediakan tambah, lihat, ubah, nonaktifkan, dan hapus jenis bahaya. Kode tidak dapat diubah setelah dibuat. Alasan dan nilai sebelum/sesudah setiap perubahan dicatat di `hazard_type_audit_log`. Jenis yang telah dipakai kejadian tidak dapat dihapus agar referensi riwayat tetap utuh; nonaktifkan jenis tersebut untuk mencegah kejadian baru menggunakannya.
 
 Dashboard pasca-login dan navigasi peran sudah tersedia. Peringatan otomatis, peta monitoring, dan halaman master operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.
