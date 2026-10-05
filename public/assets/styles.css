@@ -522,3 +522,22 @@ form button span { font-size: 17px; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+.tab-bar { display: flex; gap: 6px; margin: 0 0 18px; padding: 4px; width: fit-content; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.tab-bar a { padding: 8px 15px; border-radius: 6px; color: #5d7078; font-size: 11px; font-weight: 700; text-decoration: none; }
+.tab-bar a.active { background: var(--teal); color: #062c29; }
+.hazard-form select { display: block; width: 100%; height: 38px; margin-top: 5px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; outline: none; background: #fff; color: var(--ink); font: 11px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+.hazard-form select:focus { border-color: #57bfa4; box-shadow: 0 0 0 3px rgba(32, 184, 154, .12); }
+.location-hazards { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.location-hazards legend { padding: 0; margin-bottom: 6px; color: #536671; font-size: 10px; }
+.hazard-form .check-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #40545e; font-size: 11px; cursor: pointer; }
+.hazard-form .check-chip input { width: auto; height: auto; margin: 0; }
+.edit-details { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf1ef; }
+.edit-details > summary { width: fit-content; margin-bottom: 12px; color: #1b8d77; font-size: 11px; font-weight: 700; cursor: pointer; }
+.location-coords { margin: 4px 0 0; color: #6a7c84; font-size: 10px; }
+.location-hazard-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0; }
+.location-hazard-tags span { padding: 3px 8px; border-radius: 999px; background: #e9f6f2; color: #1b7a68; font-size: 9px; font-weight: 700; }
+.location-filter { display: grid; grid-template-columns: 1.4fr 1.4fr 1fr 1fr auto; gap: 9px; margin-bottom: 16px; }
+.location-filter input, .location-filter select { height: 40px; min-width: 0; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font: 11px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+.location-filter .save-button { width: auto; height: 40px; margin: 0; padding: 0 18px; border: 0; border-radius: 7px; background: var(--teal); color: #062c29; cursor: pointer; font: 700 11px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+@media (max-width: 900px) { .location-filter { grid-template-columns: 1fr 1fr; } }

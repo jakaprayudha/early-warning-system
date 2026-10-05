@@ -396,6 +396,8 @@ function render_dashboard(array $user, string $section = 'overview'): void
             flash('message'),
             flash('error')
         );
+    } elseif ($section === 'locations') {
+        render_locations_page($user, flash('message'), flash('error'));
     } else {
         render_dashboard_placeholder($section, $title);
     }

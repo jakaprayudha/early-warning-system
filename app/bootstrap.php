@@ -129,6 +129,46 @@ function db(): PDO
             created_at INTEGER NOT NULL
         )'
     );
+    $regionColumns = $connection->query('PRAGMA table_info(regions)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('admin_level', $regionColumns, true)) {
+        $connection->exec('ALTER TABLE regions ADD COLUMN admin_level TEXT NOT NULL DEFAULT "other"');
+    }
+    if (!in_array('timezone', $regionColumns, true)) {
+        $connection->exec('ALTER TABLE regions ADD COLUMN timezone TEXT NOT NULL DEFAULT "Asia/Jakarta"');
+    }
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS monitoring_locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL,
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+            location_type TEXT NOT NULL DEFAULT "station",
+            latitude REAL NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+            longitude REAL NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+            elevation_m REAL,
+            vertical_datum TEXT NOT NULL DEFAULT "",
+            geometry_geojson TEXT NOT NULL DEFAULT "",
+            managed_by TEXT NOT NULL DEFAULT "",
+            notes TEXT NOT NULL DEFAULT "",
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS location_hazards (
+            location_id INTEGER NOT NULL REFERENCES monitoring_locations(id) ON DELETE CASCADE,
+            hazard_code TEXT NOT NULL COLLATE NOCASE REFERENCES hazard_types(code)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            PRIMARY KEY (location_id, hazard_code)
+        )'
+    );
+    $connection->exec(
+        'CREATE INDEX IF NOT EXISTS monitoring_locations_region
+         ON monitoring_locations(region_id)'
+    );
     $connection->exec(
         'CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token_hash TEXT PRIMARY KEY,

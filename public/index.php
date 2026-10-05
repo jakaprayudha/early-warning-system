@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 require dirname(__DIR__) . '/app/auth.php';
+require dirname(__DIR__) . '/app/locations.php';
+require dirname(__DIR__) . '/app/locations_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -171,6 +173,94 @@ if ($page === 'dashboard'
         flash('error', 'Kode jenis bahaya tersebut sudah digunakan.');
     }
     redirect_to('/?page=dashboard&section=hazards');
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'locations'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'locations');
+        exit;
+    }
+
+    $tab = post_value('tab') === 'regions' ? 'regions' : 'locations';
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan perubahan wajib diisi (3–500 karakter).');
+        }
+
+        if (in_array($action, ['create_region', 'update_region'], true)) {
+            $tab = 'regions';
+            $name = trim(post_value('name'));
+            $nameLength = preg_match_all('/./us', $name);
+            $code = strtoupper(trim(post_value('code')));
+            if ($action === 'create_region' && !preg_match('/^[A-Z0-9_-]{2,32}$/', $code)) {
+                throw new InvalidArgumentException('Kode wilayah harus 2–32 karakter: huruf, angka, _ atau -.');
+            }
+            if ($nameLength === false || $nameLength < 2 || $nameLength > 120) {
+                throw new InvalidArgumentException('Nama wilayah wajib diisi (2–120 karakter).');
+            }
+            $level = post_value('admin_level');
+            $timezone = post_value('timezone');
+            if (!isset(region_admin_levels()[$level]) || !isset(region_timezones()[$timezone])) {
+                throw new InvalidArgumentException('Tingkat administrasi atau zona waktu tidak valid.');
+            }
+            $parentRaw = post_value('parent_id');
+            $parentId = null;
+            if ($parentRaw !== '') {
+                $parentId = filter_var($parentRaw, FILTER_VALIDATE_INT);
+                if ($parentId === false || $parentId < 1) {
+                    throw new InvalidArgumentException('Wilayah induk tidak valid.');
+                }
+            }
+            $regionId = (int) filter_var(post_value('region_id'), FILTER_VALIDATE_INT);
+            if ($action === 'update_region' && $regionId < 1) {
+                throw new InvalidArgumentException('Wilayah tidak valid.');
+            }
+            save_region($user, $action, [
+                'id' => $regionId,
+                'code' => $code,
+                'name' => $name,
+                'parent_id' => $parentId,
+                'admin_level' => $level,
+                'timezone' => $timezone,
+            ], $reason);
+            flash('message', $action === 'create_region' ? 'Wilayah berhasil ditambahkan.' : 'Wilayah berhasil diperbarui.');
+        } elseif ($action === 'delete_region') {
+            $tab = 'regions';
+            delete_region($user, (int) filter_var(post_value('region_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Wilayah berhasil dihapus dan perubahannya dicatat.');
+        } elseif (in_array($action, ['create_location', 'update_location'], true)) {
+            $data = parse_location_input($_POST, $action === 'create_location');
+            if ($action === 'update_location' && $data['id'] < 1) {
+                throw new InvalidArgumentException('Lokasi tidak valid.');
+            }
+            save_monitoring_location($user, $action, $data, $reason);
+            flash('message', $action === 'create_location' ? 'Lokasi pantau berhasil ditambahkan.' : 'Lokasi pantau berhasil diperbarui.');
+        } elseif ($action === 'delete_location') {
+            delete_monitoring_location($user, (int) filter_var(post_value('location_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Lokasi pantau berhasil dihapus dan perubahannya dicatat.');
+        } else {
+            throw new InvalidArgumentException('Tindakan tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'Kode tersebut sudah digunakan atau data terkait masih dipakai.');
+    }
+    redirect_to('/?page=dashboard&section=locations&tab=' . $tab);
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {

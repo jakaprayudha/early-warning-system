@@ -69,3 +69,16 @@ sqlite3 storage/db_ews.sqlite < database/hazard_types.sql
 Menu **Master data → Jenis bahaya** menyediakan tambah, lihat, ubah, nonaktifkan, dan hapus jenis bahaya. Kode tidak dapat diubah setelah dibuat. Alasan dan nilai sebelum/sesudah setiap perubahan dicatat di `hazard_type_audit_log`. Jenis yang telah dipakai kejadian tidak dapat dihapus agar referensi riwayat tetap utuh; nonaktifkan jenis tersebut untuk mencegah kejadian baru menggunakannya.
 
 Dashboard pasca-login dan navigasi peran sudah tersedia. Peringatan otomatis, peta monitoring, dan halaman master operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.
+
+## Wilayah & lokasi
+
+Menu **Master data → Wilayah & lokasi** (FR-03) memiliki dua tab:
+
+- **Lokasi pantau**: tambah, filter, ubah, nonaktifkan, dan hapus lokasi dengan koordinat, elevasi/datum opsional, geometri GeoJSON opsional, pengelola, dan jenis bahaya yang dipantau.
+- **Hierarki wilayah**: tambah, ubah (nama, induk, tingkat administrasi, zona waktu), dan hapus wilayah. Wilayah yang masih punya turunan, lokasi, kejadian, atau akses pengguna tidak dapat dihapus; induk tidak boleh berupa turunannya sendiri.
+
+Akses dibatasi oleh cakupan wilayah pengguna, dan setiap perubahan beserta alasannya dicatat di `access_audit_log`. Data contoh (7 lokasi, idempoten; jalankan setelah aplikasi dibuka sekali dan `monitoring_demo.sql` dimuat):
+
+```bash
+sqlite3 storage/db_ews.sqlite < database/locations_demo.sql
+```
