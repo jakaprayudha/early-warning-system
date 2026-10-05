@@ -161,7 +161,13 @@ if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($page === 'dashboard') {
-    render_dashboard($user);
+    $section = $_GET['section'] ?? 'overview';
+    if (!is_string($section)) {
+        http_response_code(404);
+        render_access_denied();
+        exit;
+    }
+    render_dashboard($user, $section);
     exit;
 }
 if ($page === 'admin') {

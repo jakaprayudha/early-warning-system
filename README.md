@@ -43,5 +43,7 @@ Untuk mengisi akun dummy lokal sesuai contoh, jalankan `database/seed_admin.sql`
 - Cakupan wilayah mencakup wilayah yang ditetapkan beserta seluruh turunannya. Gunakan `user_has_region_access($user, $regionId)` untuk membatasi setiap pembacaan/operasi data wilayah pada modul berikutnya. Administrator sistem memiliki cakupan seluruh wilayah.
 - Perubahan peran, status akun, cakupan, pembuatan wilayah, dan pembuatan administrator pertama dicatat pada tabel `access_audit_log`. Alasan wajib diisi untuk perubahan melalui antarmuka admin.
 - Sistem mencegah administrator menonaktifkan administrator aktif terakhir.
+- Dashboard pasca-login menyediakan sidebar sesuai peran untuk pemantauan, kejadian, riwayat, master data bahaya/lokasi/sensor/parameter/ambang/aturan/penerima, integrasi, laporan, kesehatan sistem, pengguna, dan audit.
+- Ringkasan dashboard dan halaman menu sudah tersedia; peta, kejadian, metrik sensor, ingest, serta layar master selain pengguna/wilayah belum terhubung ke data operasional dan ditandai sebagai belum tersedia.
 
-Dashboard setelah login masih berupa placeholder. Izin untuk modul-modul berikutnya telah dipetakan menurut peran; setiap halaman/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.
+Dashboard pasca-login dan navigasi peran sudah tersedia. Peta monitoring, data kejadian, dan halaman operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.

@@ -132,7 +132,7 @@ function user_has_permission(?array $user, string $permission): bool
         'dashboard' => ['master_data_manager', 'operator', 'observer', 'field_officer'],
         'manage_master_data' => ['master_data_manager'],
         'handle_alerts' => ['operator'],
-        'view_reports' => ['observer'],
+        'view_reports' => ['operator', 'observer'],
         'handle_assignments' => ['field_officer'],
     ];
 
