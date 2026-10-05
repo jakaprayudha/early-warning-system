@@ -48,4 +48,14 @@ Untuk mengisi akun dummy lokal sesuai contoh, jalankan `database/seed_admin.sql`
 - Kejadian aktif mendukung laporan manual terkontrol, pengakuan, penetapan petugas, eskalasi Waspada → Siaga → Awas, catatan tindakan, penutupan beralasan, filter, dan riwayat tindakan. Riwayat peringatan mendukung filter dan ekspor CSV yang dibatasi cakupan wilayah.
 - Peringatan otomatis belum dihasilkan karena ingest sensor dan mesin evaluasi aturan belum dibuat. Laporan manual ditandai sebagai laporan awal, bukan hasil evaluasi sensor.
 
+## Data demo pemantauan dan riwayat
+
+Setelah aplikasi dijalankan setidaknya sekali (agar tabel akun dan wilayah dibuat), isi contoh kejadian aktif, kejadian selesai, kronologi tindakan, dan wilayah demo dengan:
+
+```sh
+sqlite3 storage/db_ews.sqlite < database/monitoring_demo.sql
+```
+
+Skrip membuat tabel kejadian/kronologi bila belum tersedia dan aman dijalankan ulang tanpa menggandakan contoh. Semua catatan demo memakai sumber `DEMO-SEED:` agar mudah dikenali. Administrator sistem dapat melihat seluruh wilayah; pengguna lain hanya melihat data yang berada dalam cakupan wilayah akunnya.
+
 Dashboard pasca-login dan navigasi peran sudah tersedia. Peringatan otomatis, peta monitoring, dan halaman master operasional masih menunggu implementasi modul berikutnya. Setiap modul/data baru tetap harus menerapkan pemeriksaan izin dan cakupan wilayah di sisi server.
