@@ -170,6 +170,31 @@ function db(): PDO
          ON monitoring_locations(region_id)'
     );
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS sensors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL,
+            sensor_type TEXT NOT NULL,
+            location_id INTEGER NOT NULL REFERENCES monitoring_locations(id) ON DELETE RESTRICT,
+            parameter TEXT NOT NULL,
+            unit TEXT NOT NULL DEFAULT "",
+            protocol TEXT NOT NULL DEFAULT "manual",
+            endpoint TEXT NOT NULL DEFAULT "",
+            technical_contact TEXT NOT NULL DEFAULT "",
+            expected_interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (expected_interval_minutes BETWEEN 1 AND 10080),
+            status TEXT NOT NULL DEFAULT "active" CHECK (status IN ("active", "maintenance", "inactive")),
+            last_heartbeat_at INTEGER,
+            last_data_at INTEGER,
+            last_value TEXT NOT NULL DEFAULT "",
+            notes TEXT NOT NULL DEFAULT "",
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec('CREATE INDEX IF NOT EXISTS sensors_location ON sensors(location_id)');
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token_hash TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

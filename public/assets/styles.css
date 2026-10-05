@@ -577,3 +577,22 @@ form button span { font-size: 17px; }
 .location-map-list small { color: #6a7c84; font-size: 9px; }
 .map-list-icon { flex: none; width: 28px; height: 28px; padding: 5px; border-radius: 50% 50% 50% 6px; }
 @media (max-width: 900px) { .location-map-layout { grid-template-columns: 1fr; } .location-map { height: 420px; } .map-filter { grid-template-columns: 1fr 1fr; } .location-map-list { max-height: 320px; } }
+
+.sensor-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.sensor-summary-item { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: #536671; text-decoration: none; font-size: 10px; }
+.sensor-summary-item strong { color: #1c3039; font-size: 20px; }
+.sensor-summary-item .sensor-latest { font-size: 13px; line-height: 27px; }
+.sensor-summary-item.health-healthy strong { color: #1b8d77; }
+.sensor-summary-item.health-delayed strong { color: #c0392b; }
+.sensor-summary-item.health-maintenance strong { color: #b7791f; }
+.health-badge { padding: 4px 10px; border-radius: 999px; background: #eef2f1; color: #536671; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.health-badge.health-healthy { background: #e0f4ee; color: #1b7a68; }
+.health-badge.health-delayed { background: #fdeaea; color: #b03030; }
+.health-badge.health-maintenance { background: #fff3dc; color: #9a6a12; }
+.health-badge.health-unknown { background: #e8eef3; color: #4a6072; }
+.sensor-filter { grid-template-columns: 1.3fr 1fr 1fr 1.2fr auto; }
+.sensor-record-form { margin-left: 0; display: flex; align-items: end; gap: 9px; flex-wrap: wrap; }
+.sensor-record-form label { min-width: 150px; }
+.sensor-record-form .record-button { height: 40px; margin: 0; padding: 0 14px; width: auto; border: 1px solid #bfe3d9; border-radius: 7px; background: #eaf7f3; color: #17705e; cursor: pointer; font: 700 10px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+.sensor-record-form .record-button:hover { background: #d9f0e8; transform: none; }
+@media (max-width: 900px) { .sensor-summary { grid-template-columns: repeat(2, 1fr); } .sensor-filter { grid-template-columns: 1fr 1fr; } }

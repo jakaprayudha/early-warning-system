@@ -5,6 +5,8 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 require dirname(__DIR__) . '/app/auth.php';
 require dirname(__DIR__) . '/app/locations.php';
 require dirname(__DIR__) . '/app/locations_views.php';
+require dirname(__DIR__) . '/app/sensors.php';
+require dirname(__DIR__) . '/app/sensors_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -261,6 +263,54 @@ if ($page === 'dashboard'
         flash('error', 'Kode tersebut sudah digunakan atau data terkait masih dipakai.');
     }
     redirect_to('/?page=dashboard&section=locations&tab=' . $tab);
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'sensors'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'sensors');
+        exit;
+    }
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan perubahan wajib diisi (3–500 karakter).');
+        }
+        $sensorId = (int) filter_var(post_value('sensor_id'), FILTER_VALIDATE_INT);
+        if (in_array($action, ['create_sensor', 'update_sensor'], true)) {
+            $data = parse_sensor_input($_POST, $action === 'create_sensor');
+            if ($action === 'update_sensor' && $data['id'] < 1) {
+                throw new InvalidArgumentException('Sensor tidak valid.');
+            }
+            save_sensor($user, $action, $data, $reason);
+            flash('message', $action === 'create_sensor' ? 'Sensor berhasil ditambahkan.' : 'Sensor berhasil diperbarui.');
+        } elseif ($action === 'record_sensor') {
+            record_sensor_heartbeat($user, $sensorId, trim(post_value('value')), $reason);
+            flash('message', 'Data terakhir sensor dicatat.');
+        } elseif ($action === 'delete_sensor') {
+            delete_sensor($user, $sensorId, $reason);
+            flash('message', 'Sensor berhasil dihapus dan perubahannya dicatat.');
+        } else {
+            throw new InvalidArgumentException('Tindakan tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'ID sensor tersebut sudah digunakan.');
+    }
+    redirect_to('/?page=dashboard&section=sensors');
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {
