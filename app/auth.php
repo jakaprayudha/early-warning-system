@@ -935,6 +935,7 @@ function send_password_reset(string $email, string $name, string $token): bool
 {
     $baseUrl = env_value('APP_BASE_URL');
     $from = env_value('APP_MAIL_FROM');
+    $from ??= env_value('SMTP_USER');
     if ($baseUrl === null || filter_var($from, FILTER_VALIDATE_EMAIL) === false) {
         error_log('Password reset email not sent: configure APP_BASE_URL and APP_MAIL_FROM.');
         return false;
@@ -952,7 +953,7 @@ function send_password_reset(string $email, string $name, string $token): bool
         'X-Mailer' => 'PHP/' . PHP_VERSION,
     ];
 
-    return mail($email, $subject, $body, $headers);
+    return smtp_config() !== null ? send_mail_message($email, $subject, $body) : mail($email, $subject, $body, $headers);
 }
 
 function issue_password_reset(string $email): bool

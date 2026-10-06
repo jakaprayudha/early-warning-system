@@ -190,3 +190,9 @@ Kartu titik di Monitoring tornado punya tautan **Buka monitoring penuh** ke `/?p
 
 ## Data historis sensor
 Halaman detail sensor (`?page=sensor-detail&code=`) menampilkan filter tanggal (maks. 1 tahun), ringkasan min/maks/rata-rata, grafik, dan tabel 200 data terbaru. "Ekspor CSV" (`?page=sensor-export`) mengunduh data lengkap rentang tersebut. Data berasal dari `sensor_readings` (API/CSV/manual).
+
+## Notifikasi email (SMTP)
+- Salin `.env.example` menjadi `.env` (sudah di-ignore git) dan isi `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` (`starttls`/`ssl`/`none`), `SMTP_USER`, `SMTP_PASS`, `APP_MAIL_FROM`, `APP_BASE_URL`. Untuk Gmail gunakan App Password.
+- Saat evaluator membuat kejadian atau mengeskalasi, email diantre ke anggota aktif grup penerima (kanal `email`) lalu dikirim setelah transaksi selesai; gagal dicoba ulang hingga 3 kali. Riwayat ada di tabel `notification_log`, tanpa duplikat per kejadian/tahap/alamat.
+- Email reset password dan undangan juga memakai SMTP bila dikonfigurasi.
+- WhatsApp/SMS belum didukung; tercatat sebagai `skipped`.

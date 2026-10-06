@@ -241,19 +241,32 @@ function eval_rule(array $rule, int $now, array &$summary): void
             'Otomatis · ' . $rule['name'], $now, $now, $now, $rule['id'], $locationId,
         ]);
         $eventId = (int) db()->lastInsertId();
+        $queued = queue_notifications($eventId, (string) $rule['recipient_group'], (string) $rule['channels'], 'created', $now);
         eval_log(
             $eventId,
             'created',
             'Dibuat otomatis oleh aturan "' . $rule['name'] . '". Penerima: ' . $rule['recipient_group']
             . ' via ' . implode(', ', rule_channel_list((string) $rule['channels']))
-            . ' (pengiriman notifikasi belum diaktifkan).',
+            . ' (' . eval_queue_note($queued) . ').',
             $now
         );
         $summary['created']++;
     }
 }
 
-// Eskalasi hanya dicatat pada log kejadian; pengiriman notifikasi dikerjakan terpisah.
+function eval_queue_note(array $queued): string
+{
+    $parts = [];
+    if ($queued['email'] > 0) {
+        $parts[] = $queued['email'] . ' email diantre';
+    }
+    if ($queued['skipped'] > 0) {
+        $parts[] = $queued['skipped'] . ' pesan WA/SMS belum didukung';
+    }
+
+    return $parts === [] ? 'tidak ada penerima email' : implode(', ', $parts);
+}
+
 function eval_escalate(array $rule, array $event, int $now, array &$summary): void
 {
     if ($event['acknowledged_at'] !== null) {
@@ -271,11 +284,12 @@ function eval_escalate(array $rule, array $event, int $now, array &$summary): vo
         if ($logged->fetchColumn()) {
             continue;
         }
+        $queued = queue_notifications((int) $event['id'], (string) $step['recipient_group'], (string) $step['channels'], 'step' . $step['id'], $now);
         eval_log(
             (int) $event['id'],
             'escalated',
             'Belum diakui setelah ' . (int) $step['after_minutes'] . ' menit; eskalasi ke ' . $step['recipient_group']
-            . ' via ' . implode(', ', rule_channel_list((string) $step['channels'])) . ' ' . $marker,
+            . ' via ' . implode(', ', rule_channel_list((string) $step['channels'])) . ' (' . eval_queue_note($queued) . ') ' . $marker,
             $now
         );
         $summary['escalated']++;
@@ -307,6 +321,8 @@ function evaluate_alert_rules(?int $now = null): array
         }
         throw $error;
     }
+
+    $summary['notifications'] = deliver_pending_notifications();
 
     return $summary;
 }

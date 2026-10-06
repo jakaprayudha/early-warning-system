@@ -1,6 +1,30 @@
 <?php
 declare(strict_types=1);
 
+function load_env_file(string $path): void
+{
+    if (!is_readable($path)) {
+        return;
+    }
+    foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || !str_contains($line, '=')) {
+            continue;
+        }
+        [$name, $value] = explode('=', $line, 2);
+        $name = trim($name);
+        $value = trim($value);
+        if (strlen($value) >= 2 && ($value[0] === '"' || $value[0] === "'") && $value[-1] === $value[0]) {
+            $value = substr($value, 1, -1);
+        }
+        if (preg_match('/^[A-Z][A-Z0-9_]*$/', $name) === 1 && getenv($name) === false) {
+            putenv($name . '=' . $value);
+        }
+    }
+}
+
+load_env_file(dirname(__DIR__) . '/.env');
+
 function env_value(string $name, ?string $default = null): ?string
 {
     $value = getenv($name);
@@ -509,6 +533,22 @@ function db(): PDO
         'CREATE INDEX IF NOT EXISTS alert_event_log_event_time
          ON alert_event_log(event_id, created_at)'
     );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS notification_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+            stage TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            recipient_name TEXT NOT NULL DEFAULT "",
+            address TEXT NOT NULL DEFAULT "",
+            status TEXT NOT NULL CHECK (status IN ("pending", "sent", "failed", "skipped")),
+            error TEXT NOT NULL DEFAULT "",
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec('CREATE UNIQUE INDEX IF NOT EXISTS notification_log_unique ON notification_log(event_id, stage, channel, address)');
 
     return $connection;
 }
