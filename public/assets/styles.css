@@ -800,3 +800,29 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .user-card .token-actions { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .user-card .token-actions input { width: 220px; }
 .scope-chips .chip-unit { padding: 3px 10px; border-radius: 999px; background: #e6f4f1; color: #0f766e; font-size: 11px; font-weight: 700; }
+
+.audit-filter { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr 1fr 1fr auto; gap: 9px; align-items: end; margin-bottom: 14px; }
+.audit-filter label { display: grid; gap: 4px; color: #64748b; font-size: 11px; font-weight: 700; }
+.audit-filter input, .audit-filter select { height: 40px; min-width: 0; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font: 11px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+.audit-filter .save-button { width: auto; height: 40px; margin: 0; padding: 0 18px; border: 0; border-radius: 7px; background: var(--teal); color: #062c29; cursor: pointer; font: 700 11px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
+.audit-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: #64748b; }
+.audit-timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); display: grid; gap: 12px; }
+.audit-item { position: relative; padding: 12px 14px; border-radius: 10px; background: #fff; border: 1px solid var(--line); border-left: 4px solid #94a3b8; }
+.audit-item::before { content: ""; position: absolute; left: -23px; top: 18px; width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
+.audit-good { border-left-color: #10b981; } .audit-good::before { background: #10b981; }
+.audit-warn { border-left-color: #f59e0b; } .audit-warn::before { background: #f59e0b; }
+.audit-danger { border-left-color: #ef4444; } .audit-danger::before { background: #ef4444; }
+.audit-info { border-left-color: #3b82f6; } .audit-info::before { background: #3b82f6; }
+.audit-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.audit-badge { font-weight: 800; font-size: 13px; }
+.audit-source { padding: 1px 9px; border-radius: 999px; background: #eef2f6; color: #475569; font-size: 11px; font-weight: 700; }
+.audit-head time { margin-left: auto; color: #64748b; font-size: 11px; }
+.audit-actor { margin: 4px 0 0; font-size: 12px; }
+.audit-actor small { color: #64748b; }
+.audit-reason { margin: 4px 0 0; color: #475569; font-size: 12px; font-style: italic; }
+.audit-details { margin-top: 6px; }
+.audit-details summary { cursor: pointer; color: #0f766e; font-size: 11px; font-weight: 700; }
+.audit-details pre { margin: 6px 0 0; padding: 10px; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+.audit-pager { display: flex; justify-content: space-between; margin-top: 16px; }
+.audit-pager a { color: #0f766e; font-weight: 700; font-size: 12px; }
+@media (max-width: 1000px) { .audit-filter { grid-template-columns: 1fr 1fr; } }

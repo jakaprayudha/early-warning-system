@@ -19,6 +19,8 @@ require dirname(__DIR__) . '/app/reports.php';
 require dirname(__DIR__) . '/app/reports_views.php';
 require dirname(__DIR__) . '/app/health.php';
 require dirname(__DIR__) . '/app/health_views.php';
+require dirname(__DIR__) . '/app/audit.php';
+require dirname(__DIR__) . '/app/audit_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -104,6 +106,13 @@ if ($page === 'dashboard'
     && is_string($_GET['export'] ?? null)
     && user_has_permission($user, 'view_reports')) {
     handle_report_export($user, report_filters($_GET), $_GET['export']);
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'audit'
+    && ($_GET['export'] ?? '') === 'csv'
+    && $_SERVER['REQUEST_METHOD'] === 'GET'
+    && user_has_permission($user, 'manage_access')) {
+    handle_audit_export($user, audit_filters($_GET));
 }
 if ($page === 'history'
     && !user_has_permission($user, 'view_reports')

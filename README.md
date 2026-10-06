@@ -124,3 +124,7 @@ Menu `?page=dashboard&section=health`: banner status keseluruhan, ringkasan kese
 ## Pengguna & akses
 
 Menu `?page=admin`: ringkasan akun, pencarian/filter (nama, email, peran, status), tambah pengguna (tautan atur password dikirim lewat email, admin tidak pernah melihat password), ubah peran/status/wilayah, dan kirim tautan reset password. Admin tidak bisa mengubah peran atau menangguhkan akunnya sendiri. Pengiriman email membutuhkan `APP_BASE_URL` dan `APP_MAIL_FROM`; bila belum diatur, akun tetap dibuat dan tautan bisa dikirim ulang. Semua perubahan masuk audit akses.
+
+## Audit aktivitas
+
+Menu `?page=dashboard&section=audit` (izin `manage_access`): tampilan baca-saja yang menggabungkan audit konfigurasi/akses, jenis bahaya, dan penanganan kejadian. Filter: kata kunci, sumber, pelaku, aksi, dan periode; paginasi 25 catatan; detail JSON bisa dibuka; ekspor CSV (maks. 10.000 baris, UTC) yang juga dicatat di audit. Tidak ada fitur ubah/hapus.

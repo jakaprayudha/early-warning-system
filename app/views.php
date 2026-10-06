@@ -410,6 +410,8 @@ function render_dashboard(array $user, string $section = 'overview'): void
         render_reports_page($user);
     } elseif ($section === 'health') {
         render_health_page($user);
+    } elseif ($section === 'audit') {
+        render_audit_page($user);
     } elseif ($section === 'integrations') {
         render_integrations_page($user, flash('message'), flash('error'), flash('token'));
     } elseif ($section === 'locations') {
