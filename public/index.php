@@ -51,6 +51,7 @@ $allowedPages = [
     'api-weather-feed',
     'weather-monitor',
     'api-river-feed',
+    'river-monitor',
     'api-tide-feed',
     'api-tornado-feed',
     'logout',
@@ -128,6 +129,20 @@ if ($page === 'api-tide-feed') {
         exit('{"error":"unauthorized"}');
     }
     handle_tide_feed($user);
+}
+if ($page === 'river-monitor') {
+    if ($user === null) {
+        redirect_to('/?page=login');
+    }
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+        ? river_find_station($user, $_GET['code']) : null;
+    if ($station === null) {
+        http_response_code(404);
+        render_access_denied();
+        exit;
+    }
+    render_river_monitor_page($station);
+    exit;
 }
 if ($page === 'api-river-feed') {
     if ($user === null) {

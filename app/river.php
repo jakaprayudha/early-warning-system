@@ -83,26 +83,44 @@ function river_stations(array $user): array
     return $stations;
 }
 
+function river_dummy_row(string $code, int $at): array
+{
+    $seed = crc32($code) % 1000;
+    $level = static fn(int $t): float => max(20.0, 170 + 100 * sin($t / 9000 + $seed) + 15 * sin($t / 2400 + $seed * 3));
+    $current = $level($at);
+
+    return [
+        'code' => $code,
+        'observed_at' => gmdate('c', $at - $seed % 40),
+        'water_level_cm' => round($current, 1),
+        'change_1h_cm' => round($current - $level($at - 3600), 1),
+        'rain_upstream_mm_h' => round(max(0.0, 6 * sin($at / 500 + $seed) + 2), 1),
+        'flow_m3s' => round($current * 0.35, 1),
+    ];
+}
+
 // Pembangkit data simulasi; menggantikan respons JSON sensor sampai API asli tersedia.
 function river_dummy_feed(array $codes): array
 {
     $now = time();
+
+    return [
+        'source' => 'dummy',
+        'generated_at' => gmdate('c', $now),
+        'stations' => array_map(static fn(mixed $code): array => river_dummy_row((string) $code, $now), $codes),
+    ];
+}
+
+// Riwayat simulasi 3 jam terakhir (interval 2 menit) untuk grafik halaman detail.
+function river_dummy_history(string $code): array
+{
+    $now = time();
     $rows = [];
-    foreach ($codes as $code) {
-        $seed = crc32((string) $code) % 1000;
-        $level = static fn(int $t): float => 170 + 100 * sin($t / 9000 + $seed) + 15 * sin($t / 2400 + $seed * 3);
-        $current = max(20.0, $level($now));
-        $rows[] = [
-            'code' => (string) $code,
-            'observed_at' => gmdate('c', $now - $seed % 40),
-            'water_level_cm' => round($current, 1),
-            'change_1h_cm' => round($current - max(20.0, $level($now - 3600)), 1),
-            'rain_upstream_mm_h' => round(max(0.0, 6 * sin($now / 500 + $seed) + 2), 1),
-            'flow_m3s' => round($current * 0.35, 1),
-        ];
+    for ($i = 90; $i >= 1; $i--) {
+        $rows[] = river_dummy_row($code, $now - $i * 120);
     }
 
-    return ['source' => 'dummy', 'generated_at' => gmdate('c', $now), 'stations' => $rows];
+    return $rows;
 }
 
 function river_fetch_feed(array $codes): array
@@ -134,13 +152,35 @@ function handle_river_feed(array $user): never
         http_response_code(403);
         exit('{"error":"forbidden"}');
     }
-    $codes = array_map(static fn(array $s): string => (string) $s['code'], river_stations($user));
-    $feed = river_fetch_feed($codes);
+    $stations = river_stations($user);
+    $only = $_GET['code'] ?? null;
+    if (is_string($only)) {
+        $stations = array_values(array_filter($stations, static fn(array $s): bool => $s['code'] === $only));
+        if ($stations === []) {
+            http_response_code(404);
+            exit('{"error":"not_found"}');
+        }
+    }
+    $feed = river_fetch_feed(array_map(static fn(array $s): string => (string) $s['code'], $stations));
     $thresholds = [];
-    foreach (river_stations($user) as $station) {
+    foreach ($stations as $station) {
         $thresholds[$station['code']] = $station['thresholds'];
     }
     $feed['thresholds'] = $thresholds;
+    if (is_string($only) && ($_GET['history'] ?? '') === '1') {
+        $feed['history'] = $feed['source'] === 'dummy' ? river_dummy_history($only) : [];
+    }
     echo json_encode($feed, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+function river_find_station(array $user, string $code): ?array
+{
+    foreach (river_stations($user) as $station) {
+        if ($station['code'] === $code) {
+            return $station;
+        }
+    }
+
+    return null;
 }

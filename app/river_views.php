@@ -74,6 +74,7 @@ function render_river_page(array $user): void
                                 echo $parts === [] ? 'Belum ada' : e(implode(' · ', $parts));
                                 ?></dd></div>
                         </dl>
+                        <a class="weather-detail-link" href="/?page=river-monitor&amp;code=<?= e(rawurlencode((string) $station['code'])) ?>">Buka monitoring penuh <span aria-hidden="true">↗</span></a>
                         <footer>
                             <span><code><?= e($station['code']) ?></code> · <?= e(number_format((float) $station['latitude'], 5, '.', '')) ?>, <?= e(number_format((float) $station['longitude'], 5, '.', '')) ?></span>
                             <span>Diamati <b data-field="time"><?= $r === null ? '—' : e($local((string) $r['observed_at'])) ?></b></span>
@@ -84,5 +85,68 @@ function render_river_page(array $user): void
         <?php endif; ?>
         <p class="scope-hint">Status dihitung dari ambang tinggi muka air yang disetujui di Ambang &amp; persetujuan. Data simulasi tidak disimpan. Atur <code>APP_RIVER_FEED_URL</code> ke API JSON sensor (skema: <code>stations[].code, water_level_cm, change_1h_cm, rain_upstream_mm_h, flow_m3s, observed_at</code>) untuk memakai data asli.</p>
     </section>
+    <?php
+}
+
+function render_river_monitor_page(array $station): void
+{
+    $levels = river_levels();
+    $charts = [
+        ['water_level_cm', 'Tinggi muka air', 'cm', '#2f80c9', 1, true],
+        ['change_1h_cm', 'Perubahan 1 jam', 'cm', '#d9822b', 1, false],
+        ['rain_upstream_mm_h', 'Hujan hulu', 'mm/jam', '#17806b', 1, false],
+        ['flow_m3s', 'Debit', 'm³/s', '#7a5bc2', 1, false],
+    ];
+    $url = '/?page=api-river-feed&code=' . rawurlencode((string) $station['code']);
+    ?>
+    <!doctype html>
+    <html lang="id">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Monitoring <?= e($station['name']) ?> · EWS</title>
+        <link rel="stylesheet" href="/assets/styles.css">
+        <script src="/assets/app.js" defer></script>
+    </head>
+    <body class="monitor-body">
+    <main class="monitor-page" data-river-monitor data-feed-url="<?= e($url . '&history=1') ?>" data-levels="<?= e(json_encode($levels, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>">
+        <header class="monitor-head">
+            <div>
+                <p class="eyebrow">MONITORING SUNGAI · REALTIME</p>
+                <h1><?= e($station['name']) ?></h1>
+                <p><?= e($station['region_label']) ?> · <code><?= e($station['code']) ?></code> · <?= e(number_format((float) $station['latitude'], 5, '.', '')) ?>, <?= e(number_format((float) $station['longitude'], 5, '.', '')) ?></p>
+            </div>
+            <div class="monitor-actions">
+                <span class="weather-source dummy" data-monitor-source><i></i>Memuat…</span>
+                <strong class="weather-clock" data-monitor-clock>--:--:--</strong>
+                <a class="button secondary" href="/?page=dashboard&amp;section=river">← Kembali</a>
+            </div>
+        </header>
+        <section class="monitor-now monitor-now-5">
+            <article class="monitor-main"><span>Tinggi muka air</span><strong><span data-now="water_level_cm">—</span><small> cm</small></strong><em class="weather-level river-normal" data-monitor-level>—</em></article>
+            <article><span>Tren</span><strong class="river-trend" data-now="trend">—</strong></article>
+            <article><span>Perubahan 1 jam</span><strong><span data-now="change_1h_cm">—</span><small> cm</small></strong></article>
+            <article><span>Hujan hulu</span><strong><span data-now="rain_upstream_mm_h">—</span><small> mm/jam</small></strong></article>
+            <article><span>Debit</span><strong><span data-now="flow_m3s">—</span><small> m³/s</small></strong></article>
+            <article><span>Diamati</span><strong class="weather-clock" data-now="observed_at">—</strong></article>
+        </section>
+        <section class="monitor-charts">
+            <?php foreach ($charts as [$key, $title, $unit, $color, $digits, $wide]): ?>
+                <article class="monitor-chart <?= $wide ? 'wide' : '' ?>">
+                    <header><h2><?= e($title) ?></h2><span><?= e($unit) ?></span></header>
+                    <canvas data-chart="<?= e($key) ?>" data-color="<?= e($color) ?>" data-digits="<?= $digits ?>" <?= $wide ? 'data-thresholds="' . e(json_encode($station['thresholds'], JSON_THROW_ON_ERROR)) . '"' : '' ?> role="img" aria-label="Grafik <?= e($title) ?>"></canvas>
+                </article>
+            <?php endforeach; ?>
+        </section>
+        <section class="panel monitor-table">
+            <h2>Data realtime terbaru</h2>
+            <table>
+                <thead><tr><th>Waktu</th><th>Muka air (cm)</th><th>Perubahan 1 jam (cm)</th><th>Hujan hulu (mm/jam)</th><th>Debit (m³/s)</th></tr></thead>
+                <tbody data-monitor-rows><tr><td colspan="5">Memuat…</td></tr></tbody>
+            </table>
+        </section>
+    </main>
+    </body>
+    </html>
     <?php
 }

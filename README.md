@@ -166,3 +166,7 @@ Menu **Pemantauan → Monitoring tornado** menampilkan titik rawan tornado (baha
 ### Halaman monitoring penuh (cuaca)
 
 Setiap kartu stasiun di Monitoring cuaca punya tautan **Buka monitoring penuh** ke `/?page=weather-monitor&code=<kode>`: halaman layar penuh tanpa sidebar/header dengan nilai realtime, grafik (hujan, suhu, kelembapan, angin, tekanan) dan tabel data terbaru, diperbarui tiap 5 detik. Riwayat awal 3 jam berasal dari simulasi; bila `APP_WEATHER_FEED_URL` aktif, grafik terisi dari polling. Endpoint: `/?page=api-weather-feed&code=<kode>&history=1`.
+
+### Halaman monitoring penuh (sungai)
+
+Kartu pos di Monitoring sungai punya tautan **Buka monitoring penuh** ke `/?page=river-monitor&code=<kode>`: layar penuh tanpa sidebar/header dengan nilai realtime, grafik tinggi muka air (dengan garis ambang Waspada/Siaga/Awas), perubahan 1 jam, hujan hulu, debit, dan tabel data terbaru (polling 5 detik). Endpoint: `/?page=api-river-feed&code=<kode>&history=1`.

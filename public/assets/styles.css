@@ -905,3 +905,5 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .monitor-table th { color: #75858a; font-weight: 600; font-size: 11px; }
 @media (max-width: 900px) { .monitor-now { grid-template-columns: repeat(2, 1fr); } .monitor-charts { grid-template-columns: 1fr; } }
 .monitor-now article strong > span { font-size: inherit; color: inherit; }
+.monitor-now-5 { grid-template-columns: 1.4fr repeat(5, 1fr); }
+.monitor-now .river-trend { margin-left: 0; font-size: 20px; }
