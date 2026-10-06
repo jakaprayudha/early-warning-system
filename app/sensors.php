@@ -390,3 +390,14 @@ function save_sensor_specs(array $user, int $sensorId, array $data, string $reas
         throw $error;
     }
 }
+
+function sensor_find_by_code(array $user, string $code): ?array
+{
+    foreach (list_sensors($user) as $sensor) {
+        if (strcasecmp($sensor['code'], $code) === 0) {
+            return $sensor;
+        }
+    }
+
+    return null;
+}

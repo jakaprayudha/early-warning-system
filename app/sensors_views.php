@@ -94,6 +94,7 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
             <div class="sensor-summary-item"><strong class="sensor-latest"><?= e(sensor_age_label($latest ?: null)) ?></strong><span>Data terbaru</span></div>
         </div>
 
+        <?php if ($sensors !== []): ?><p class="sensor-qr-actions"><a class="save-button" href="/?page=sensor-label">Cetak semua label QR</a></p><?php endif; ?>
         <section class="panel hazard-create-panel">
             <div class="panel-heading"><div><h2>Tambah sensor / sumber data</h2><p>ID bersifat tetap setelah sensor dibuat.</p></div></div>
             <?php if ($locations === []): ?>
@@ -126,8 +127,8 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
             <div class="hazard-type-list">
                 <?php foreach ($sensors as $sensor): ?>
                     <?php $id = (int) $sensor['id']; ?>
-                    <article class="panel hazard-type-card">
-                        <div class="hazard-type-heading">
+                    <article class="panel hazard-type-card sensor-card sensor-card-<?= e($sensor['health']) ?>">
+                        <div class="hazard-type-heading sensor-heading">
                             <span class="hazard-icon" aria-hidden="true">⌁</span>
                             <div>
                                 <h3><?= e($sensor['name']) ?></h3>
@@ -135,7 +136,11 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
                                 <p class="location-coords"><?= e($sensor['parameter']) ?><?= $sensor['unit'] !== '' ? ' (' . e($sensor['unit']) . ')' : '' ?> · <?= e(sensor_protocols()[$sensor['protocol']] ?? 'Lainnya') ?> · tiap <?= (int) $sensor['expected_interval_minutes'] ?> menit</p>
                                 <p class="location-coords">Data terakhir: <?= e(sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at'])) ?><?= $sensor['last_value'] !== '' ? ' · ' . e($sensor['last_value']) : '' ?></p>
                             </div>
-                            <span class="health-badge health-<?= e($sensor['health']) ?>"><?= e($labels[$sensor['health']]) ?></span>
+                            <div class="sensor-card-side">
+                                <span class="health-badge health-<?= e($sensor['health']) ?>"><i class="health-dot health-<?= e($sensor['health']) ?>"></i><?= e($labels[$sensor['health']]) ?></span>
+                                <a class="qr-canvas" data-qr-path="<?= e(sensor_detail_path($sensor)) ?>" href="<?= e(sensor_detail_path($sensor)) ?>" title="Buka detail sensor" aria-label="QR code sensor <?= e($sensor['code']) ?>"></a>
+                                <a class="qr-print-link" href="/?page=sensor-label&amp;code=<?= e(rawurlencode((string) $sensor['code'])) ?>&amp;print=1">⎙ Cetak QR</a>
+                            </div>
                         </div>
                         <?php $spec = $specs[$id] ?? null; ?>
                         <details class="edit-details sensor-spec">
@@ -196,5 +201,117 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
             <?php endif; ?>
         </section>
     </div>
+    <?php
+}
+
+function sensor_page_head(string $title): void
+{
+    ?>
+    <!doctype html>
+    <html lang="id">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><?= e($title) ?> · EWS</title>
+        <link rel="stylesheet" href="/assets/styles.css">
+        <script src="/assets/qrcode.js" defer></script>
+        <script src="/assets/app.js" defer></script>
+    </head>
+    <?php
+}
+
+function sensor_detail_path(array $sensor): string
+{
+    return '/?page=sensor-detail&code=' . rawurlencode((string) $sensor['code']);
+}
+
+function render_sensor_label_block(array $sensor): void
+{
+    ?>
+    <figure class="qr-label">
+        <div class="qr-canvas" data-qr-path="<?= e(sensor_detail_path($sensor)) ?>" role="img" aria-label="QR code sensor <?= e($sensor['code']) ?>"></div>
+        <figcaption>
+            <strong><?= e($sensor['name']) ?></strong>
+            <code><?= e($sensor['code']) ?></code>
+            <span><?= e($sensor['location_name']) ?></span>
+        </figcaption>
+    </figure>
+    <?php
+}
+
+function render_sensor_label_page(array $sensors, bool $single): void
+{
+    sensor_page_head($single ? 'Label ' . $sensors[0]['code'] : 'Label QR sensor');
+    ?>
+    <body class="monitor-body label-body"<?= isset($_GET['print']) ? ' data-autoprint' : '' ?>>
+    <main class="monitor-page">
+        <div class="label-toolbar">
+            <a href="/?page=dashboard&amp;section=sensors">← Kembali</a>
+            <span><?= count($sensors) ?> label · tempel pada alat, scan untuk membuka detail sensor</span>
+            <button type="button" class="save-button" data-print>Cetak</button>
+        </div>
+        <div class="label-grid">
+            <?php foreach ($sensors as $sensor): render_sensor_label_block($sensor); endforeach; ?>
+        </div>
+    </main>
+    </body>
+    </html>
+    <?php
+}
+
+function render_sensor_detail_page(array $sensor, ?array $spec, bool $canManage): void
+{
+    $labels = sensor_health_labels();
+    $rows = [
+        'ID sensor' => $sensor['code'],
+        'Tipe' => sensor_types()[$sensor['sensor_type']] ?? 'Lainnya',
+        'Lokasi' => $sensor['location_name'],
+        'Parameter' => $sensor['parameter'] . ($sensor['unit'] !== '' ? ' (' . $sensor['unit'] . ')' : ''),
+        'Koneksi' => sensor_protocols()[$sensor['protocol']] ?? 'Lainnya',
+        'Interval data' => 'Tiap ' . (int) $sensor['expected_interval_minutes'] . ' menit',
+        'Status' => sensor_statuses()[$sensor['status']] ?? $sensor['status'],
+        'Data terakhir' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at'])
+            . ($sensor['last_value'] !== '' ? ' · ' . $sensor['last_value'] : ''),
+        'Kontak teknis' => $sensor['technical_contact'],
+        'Catatan' => $sensor['notes'],
+    ];
+    sensor_page_head($sensor['name']);
+    ?>
+    <body class="monitor-body">
+    <main class="monitor-page sensor-detail">
+        <div class="label-toolbar">
+            <a href="/?page=dashboard">← Dashboard</a>
+            <span></span>
+            <?php if ($canManage): ?><a class="save-button" href="/?page=sensor-label&amp;code=<?= e(rawurlencode((string) $sensor['code'])) ?>">Cetak label QR</a><?php endif; ?>
+        </div>
+        <header class="monitor-head">
+            <div>
+                <p class="eyebrow">DETAIL SENSOR</p>
+                <h1><?= e($sensor['name']) ?></h1>
+                <p><code><?= e($sensor['code']) ?></code> · <?= e($sensor['location_name']) ?></p>
+            </div>
+            <span class="health-badge health-<?= e($sensor['health']) ?>"><?= e($labels[$sensor['health']]) ?></span>
+        </header>
+        <section class="panel monitor-table">
+            <h2>Informasi umum</h2>
+            <dl class="spec-list">
+                <?php foreach ($rows as $label => $value): if ($value !== ''): ?>
+                    <div><dt><?= e($label) ?></dt><dd><?= e((string) $value) ?></dd></div>
+                <?php endif; endforeach; ?>
+            </dl>
+        </section>
+        <section class="panel monitor-table">
+            <h2>Spesifikasi</h2>
+            <?php $filled = false; ?>
+            <dl class="spec-list">
+                <?php if ($spec !== null): foreach (sensor_spec_fields() as $key => [$label]): if ($spec[$key] !== ''): $filled = true; ?>
+                    <div><dt><?= e($label) ?></dt><dd><?= e($spec[$key]) ?></dd></div>
+                <?php endif; endforeach; if ($spec['notes'] !== ''): $filled = true; ?><div class="spec-notes"><dt>Catatan</dt><dd><?= e($spec['notes']) ?></dd></div><?php endif; endif; ?>
+            </dl>
+            <?php if (!$filled): ?><p class="scope-hint">Spesifikasi belum diisi.</p><?php endif; ?>
+        </section>
+    </main>
+    </body>
+    </html>
     <?php
 }

@@ -52,6 +52,8 @@ $allowedPages = [
     'api-weather-feed',
     'weather-monitor',
     'ews',
+    'sensor-detail',
+    'sensor-label',
     'api-river-feed',
     'river-monitor',
     'api-tide-feed',
@@ -198,6 +200,32 @@ if ($page === 'api-river-feed') {
         exit('{"error":"forbidden"}');
     }
     handle_river_feed($user);
+}
+if ($page === 'sensor-detail' || $page === 'sensor-label') {
+    if ($user === null) {
+        $_SESSION['after_login'] = $_SERVER['REQUEST_URI'] ?? '/?page=dashboard';
+        redirect_to('/?page=login');
+    }
+    $code = is_string($_GET['code'] ?? null) ? $_GET['code'] : '';
+    $canManage = user_has_permission($user, 'manage_master_data');
+    if ($page === 'sensor-label') {
+        $sensors = !$canManage ? [] : ($code === '' ? list_sensors($user) : array_filter([sensor_find_by_code($user, $code)]));
+        if ($sensors === []) {
+            http_response_code(404);
+            render_access_denied();
+            exit;
+        }
+        render_sensor_label_page(array_values($sensors), $code !== '');
+        exit;
+    }
+    $sensor = $code !== '' && user_has_permission($user, 'dashboard') ? sensor_find_by_code($user, $code) : null;
+    if ($sensor === null) {
+        http_response_code(404);
+        render_access_denied();
+        exit;
+    }
+    render_sensor_detail_page($sensor, get_sensor_specs([(int) $sensor['id']])[(int) $sensor['id']] ?? null, $canManage);
+    exit;
 }
 if ($page === 'ews') {
     if ($user === null) {
@@ -1103,6 +1131,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page !== 'logout') {
                 }
                 sign_in((int) $account['id']);
                 $signedIn = signed_in_user();
+                $next = $_SESSION['after_login'] ?? null;
+                unset($_SESSION['after_login']);
+                if (is_string($next) && preg_match('#^/\?page=sensor-detail&code=[A-Za-z0-9._%~-]{1,60}$#', $next) === 1) {
+                    redirect_to($next);
+                }
                 redirect_to($signedIn === null ? '/?page=dashboard' : ews_landing_url($signedIn));
             }
         } elseif ($page === 'forgot-password') {

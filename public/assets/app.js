@@ -1081,3 +1081,21 @@ document.addEventListener('submit', (event) => {
     event.preventDefault();
   }
 });
+
+(function () {
+  const blocks = document.querySelectorAll('[data-qr-path]');
+  if (blocks.length && typeof qrcode === 'function') {
+    blocks.forEach((block) => {
+      const qr = qrcode(0, 'M');
+      qr.addData(window.location.origin + block.getAttribute('data-qr-path'));
+      qr.make();
+      block.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    });
+  }
+  if (document.body.hasAttribute('data-autoprint')) {
+    window.addEventListener('load', () => setTimeout(() => window.print(), 300));
+  }
+  document.querySelectorAll('[data-print]').forEach((button) => {
+    button.addEventListener('click', () => window.print());
+  });
+})();

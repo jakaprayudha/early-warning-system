@@ -924,3 +924,37 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .spec-list dt { font-size: 12px; color: #5c746c; }
 .spec-list dd { margin: 2px 0 0; font-weight: 700; overflow-wrap: anywhere; }
 .spec-list .spec-notes { grid-column: 1 / -1; }
+
+.sensor-qr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.sensor-qr-actions a { text-decoration: none; display: inline-block; }
+.label-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 13px; }
+.label-toolbar a:not(.save-button) { color: #17352d; font-weight: 700; text-decoration: none; }
+.label-toolbar a.save-button { text-decoration: none; }
+.label-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.qr-label { margin: 0; padding: 14px; background: #fff; border: 2px solid #17352d; border-radius: 10px; text-align: center; break-inside: avoid; }
+.qr-canvas { width: 170px; height: 170px; margin: 0 auto 8px; }
+.qr-canvas svg { width: 100%; height: 100%; display: block; }
+.qr-label figcaption { display: grid; gap: 2px; font-size: 13px; }
+.qr-label figcaption code { font-size: 12px; }
+@media print {
+  .label-toolbar { display: none; }
+  .label-body, .label-body .monitor-page { background: #fff; padding: 0; }
+  .label-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.sensor-card-qr { display: grid; justify-items: center; gap: 6px; margin-left: 12px; }
+.sensor-card-qr .qr-canvas { width: 96px; height: 96px; margin: 0; padding: 4px; background: #fff; border: 1px solid #d5e0dc; border-radius: 8px; display: block; }
+.sensor-card-qr .record-button { text-decoration: none; font-size: 12px; padding: 5px 10px; }
+
+.sensor-card { border-left: 4px solid #94a3b8; }
+.sensor-card-healthy { border-left-color: #1b8d77; }
+.sensor-card-delayed { border-left-color: #d63a2f; }
+.sensor-card-maintenance { border-left-color: #e0a32a; }
+.sensor-card-unknown { border-left-color: #4a90c2; }
+.sensor-heading { align-items: flex-start; }
+.sensor-card-side { display: grid; justify-items: end; gap: 6px; margin-left: auto; flex: none; }
+.sensor-card-side .health-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; font-size: 11px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
+.sensor-card-side .health-dot { width: 8px; height: 8px; border: 0; box-shadow: none; }
+.sensor-card-side .qr-canvas { width: 64px; height: 64px; margin: 0; padding: 3px; background: #fff; border: 1px solid #d5e0dc; border-radius: 8px; display: block; }
+.qr-print-link { color: #1b7a68; font-size: 11px; font-weight: 700; text-decoration: none; }
+.qr-print-link:hover { text-decoration: underline; }

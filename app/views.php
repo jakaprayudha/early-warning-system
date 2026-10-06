@@ -289,6 +289,7 @@ function render_app_shell_start(
         <meta name="theme-color" content="#0c1b2a">
         <title><?= e($pageTitle) ?> · EWS</title>
         <link rel="stylesheet" href="/assets/styles.css">
+        <script src="/assets/qrcode.js" defer></script>
         <script src="/assets/app.js" defer></script>
     </head>
     <body class="app-body">
