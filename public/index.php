@@ -55,6 +55,7 @@ $allowedPages = [
     'api-tide-feed',
     'tide-monitor',
     'api-tornado-feed',
+    'tornado-monitor',
     'logout',
 ];
 if (!is_string($page) || !in_array($page, $allowedPages, true)) {
@@ -113,6 +114,20 @@ if ($page === 'dashboard' && !user_has_permission($user, 'dashboard')) {
 if ($page === 'alerts' && !user_has_permission($user, 'handle_alerts')) {
     http_response_code(403);
     render_access_denied();
+    exit;
+}
+if ($page === 'tornado-monitor') {
+    if ($user === null) {
+        redirect_to('/?page=login');
+    }
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+        ? tornado_find_station($user, $_GET['code']) : null;
+    if ($station === null) {
+        http_response_code(404);
+        render_access_denied();
+        exit;
+    }
+    render_tornado_monitor_page($station);
     exit;
 }
 if ($page === 'api-tornado-feed') {

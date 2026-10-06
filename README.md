@@ -174,3 +174,7 @@ Kartu pos di Monitoring sungai punya tautan **Buka monitoring penuh** ke `/?page
 ### Halaman monitoring penuh (pasang surut)
 
 Kartu pos di Monitoring pasang surut punya tautan **Buka monitoring penuh** ke `/?page=tide-monitor&code=<kode>`: layar penuh tanpa sidebar/header dengan nilai realtime, grafik tinggi pasang (dengan garis ambang), perubahan 1 jam, gelombang, angin, dan tabel data terbaru (polling 5 detik). Endpoint: `/?page=api-tide-feed&code=<kode>&history=1`.
+
+### Halaman monitoring penuh (tornado)
+
+Kartu titik di Monitoring tornado punya tautan **Buka monitoring penuh** ke `/?page=tornado-monitor&code=<kode>`: layar penuh tanpa sidebar/header dengan nilai realtime, grafik kecepatan angin (dengan garis ambang), hembusan maksimum, tekanan udara, perubahan 1 jam, dan tabel data terbaru (polling 5 detik). Endpoint: `/?page=api-tornado-feed&code=<kode>&history=1`.

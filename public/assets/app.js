@@ -945,3 +945,132 @@ if (locationMap) {
     refresh();
     setInterval(refresh, 5000);
 })();
+
+(() => {
+    const page = document.querySelector('[data-tornado-monitor]');
+    if (!page) return;
+    const levels = JSON.parse(page.dataset.levels || '{}');
+    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
+    const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
+    const trends = { rising: '▲ Menguat', falling: '▼ Melemah', steady: '■ Stabil' };
+    const MAX_POINTS = 120;
+    let series = [];
+    let thresholds = {};
+    const source = page.querySelector('[data-monitor-source]');
+    const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
+        const t = thresholds[key];
+        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
+    }, 'normal');
+
+    const draw = (canvas) => {
+        const key = canvas.dataset.chart;
+        const digits = Number(canvas.dataset.digits);
+        const color = canvas.dataset.color;
+        const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
+        const ratio = window.devicePixelRatio || 1;
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        if (!width || !height) return;
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(ratio, ratio);
+        ctx.clearRect(0, 0, width, height);
+        const pad = { l: 46, r: 12, t: 10, b: 22 };
+        const values = series.map((row) => Number(row[key]));
+        if (values.length < 2) return;
+        let min = Math.min(...values, ...lines.map(([, t]) => t.value));
+        let max = Math.max(...values, ...lines.map(([, t]) => t.value));
+        if (max - min < 1e-6) { max += 1; min -= 1; }
+        const span = max - min;
+        min -= span * 0.08;
+        max += span * 0.08;
+        const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
+        const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillStyle = '#75858a';
+        ctx.strokeStyle = '#e4ebe8';
+        ctx.lineWidth = 1;
+        for (let g = 0; g <= 4; g += 1) {
+            const v = min + (max - min) * g / 4;
+            ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
+        }
+        ctx.textBaseline = 'alphabetic';
+        [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
+            ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
+            ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
+        });
+        lines.forEach(([sev, t]) => {
+            ctx.save();
+            ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
+            ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
+            ctx.fillText(levels[sev] + ' ' + fmt(t.value, 0), width - pad.r - 2, y(t.value) - 3);
+            ctx.restore();
+        });
+        ctx.beginPath();
+        values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+    };
+
+    const render = () => {
+        page.querySelectorAll('canvas[data-chart]').forEach(draw);
+        const last = series[series.length - 1];
+        if (!last) return;
+        const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
+        now('wind_kmh', fmt(last.wind_kmh));
+        now('change_1h_kmh', (last.change_1h_kmh > 0 ? '+' : '') + fmt(last.change_1h_kmh));
+        now('gust_kmh', fmt(last.gust_kmh));
+        now('pressure_hpa', fmt(last.pressure_hpa));
+        now('observed_at', clock(last.observed_at));
+        const change = Number(last.change_1h_kmh);
+        const trend = change >= 3 ? 'rising' : (change <= -3 ? 'falling' : 'steady');
+        now('trend', trends[trend]);
+        page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
+        const level = levelOf(Number(last.wind_kmh));
+        const badge = page.querySelector('[data-monitor-level]');
+        badge.textContent = levels[level];
+        badge.className = 'weather-level river-' + level;
+        const body = page.querySelector('[data-monitor-rows]');
+        body.replaceChildren(...series.slice(-12).reverse().map((row) => {
+            const tr = document.createElement('tr');
+            [clock(row.observed_at), fmt(row.wind_kmh), (row.change_1h_kmh > 0 ? '+' : '') + fmt(row.change_1h_kmh), fmt(row.gust_kmh), fmt(row.pressure_hpa)].forEach((text) => {
+                const td = document.createElement('td'); td.textContent = text; tr.append(td);
+            });
+            return tr;
+        }));
+    };
+
+    let first = true;
+    const refresh = async () => {
+        try {
+            const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('feed');
+            const data = await response.json();
+            if (first && Array.isArray(data.history)) series = data.history.slice();
+            first = false;
+            const row = data.stations[0];
+            if (row) {
+                thresholds = (data.thresholds && data.thresholds[row.code]) || {};
+                if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
+            }
+            series = series.slice(-MAX_POINTS);
+            page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
+            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
+            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+            render();
+        } catch (error) {
+            source.className = 'weather-source error';
+            source.lastChild.textContent = 'Gagal memuat data';
+        }
+    };
+    window.addEventListener('resize', render);
+    refresh();
+    setInterval(refresh, 5000);
+})();
+

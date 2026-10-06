@@ -83,26 +83,44 @@ function tornado_stations(array $user): array
     return $stations;
 }
 
+function tornado_dummy_row(string $code, int $at): array
+{
+    $seed = crc32($code) % 1000;
+    $wave = static fn(int $t): float => max(3.0, 36 + 22 * sin($t / 6000 + $seed) + 6 * sin($t / 2500 + $seed * 2));
+    $current = $wave($at);
+
+    return [
+        'code' => $code,
+        'observed_at' => gmdate('c', $at - $seed % 40),
+        'wind_kmh' => round($current, 1),
+        'change_1h_kmh' => round($current - $wave($at - 3600), 1),
+        'gust_kmh' => round($current * (1.3 + 0.2 * sin($at / 300 + $seed)), 1),
+        'pressure_hpa' => round(1008 - $current * 0.12 + 2 * sin($at / 900 + $seed), 1),
+    ];
+}
+
 // Pembangkit data simulasi; menggantikan respons JSON sensor sampai API asli tersedia.
 function tornado_dummy_feed(array $codes): array
 {
     $now = time();
+
+    return [
+        'source' => 'dummy',
+        'generated_at' => gmdate('c', $now),
+        'stations' => array_map(static fn(mixed $code): array => tornado_dummy_row((string) $code, $now), $codes),
+    ];
+}
+
+// Riwayat simulasi 3 jam terakhir (interval 2 menit) untuk grafik halaman detail.
+function tornado_dummy_history(string $code): array
+{
+    $now = time();
     $rows = [];
-    foreach ($codes as $code) {
-        $seed = crc32((string) $code) % 1000;
-        $wave = static fn(int $t): float => 36 + 22 * sin($t / 6000 + $seed) + 6 * sin($t / 2500 + $seed * 2);
-        $current = max(3.0, $wave($now));
-        $rows[] = [
-            'code' => (string) $code,
-            'observed_at' => gmdate('c', $now - $seed % 40),
-            'wind_kmh' => round($current, 1),
-            'change_1h_kmh' => round($current - $wave($now - 3600), 1),
-            'gust_kmh' => round($current * (1.3 + 0.2 * sin($now / 300 + $seed)), 1),
-            'pressure_hpa' => round(1008 - $current * 0.12 + 2 * sin($now / 900 + $seed), 1),
-        ];
+    for ($i = 90; $i >= 1; $i--) {
+        $rows[] = tornado_dummy_row($code, $now - $i * 120);
     }
 
-    return ['source' => 'dummy', 'generated_at' => gmdate('c', $now), 'stations' => $rows];
+    return $rows;
 }
 
 function tornado_fetch_feed(array $codes): array
@@ -134,13 +152,35 @@ function handle_tornado_feed(array $user): never
         http_response_code(403);
         exit('{"error":"forbidden"}');
     }
-    $codes = array_map(static fn(array $s): string => (string) $s['code'], tornado_stations($user));
-    $feed = tornado_fetch_feed($codes);
+    $stations = tornado_stations($user);
+    $only = $_GET['code'] ?? null;
+    if (is_string($only)) {
+        $stations = array_values(array_filter($stations, static fn(array $s): bool => $s['code'] === $only));
+        if ($stations === []) {
+            http_response_code(404);
+            exit('{"error":"not_found"}');
+        }
+    }
+    $feed = tornado_fetch_feed(array_map(static fn(array $s): string => (string) $s['code'], $stations));
     $thresholds = [];
-    foreach (tornado_stations($user) as $station) {
+    foreach ($stations as $station) {
         $thresholds[$station['code']] = $station['thresholds'];
     }
     $feed['thresholds'] = $thresholds;
+    if (is_string($only) && ($_GET['history'] ?? '') === '1') {
+        $feed['history'] = $feed['source'] === 'dummy' ? tornado_dummy_history($only) : [];
+    }
     echo json_encode($feed, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+function tornado_find_station(array $user, string $code): ?array
+{
+    foreach (tornado_stations($user) as $station) {
+        if ($station['code'] === $code) {
+            return $station;
+        }
+    }
+
+    return null;
 }
