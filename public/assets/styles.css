@@ -858,3 +858,19 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .weather-metrics small { color: #75858a; font-weight: 600; }
 .weather-card footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf1ef; color: #75858a; font-size: 10px; flex-wrap: wrap; }
 @media (max-width: 900px) { .weather-summary { grid-template-columns: 1fr 1fr; } }
+
+.weather-level.river-watch { background: #fdf0d8; color: #a8680f; }
+.weather-level.river-alert { background: #fde4d0; color: #b4541a; }
+.weather-level.river-warning { background: #fbe3e0; color: #b53a31; }
+.weather-level.river-normal { background: #dff3ee; color: #17806b; }
+.river-trend { margin-left: auto; font-size: 11px; font-style: normal; font-weight: 700; color: #75858a; }
+.river-trend.trend-rising { color: #b53a31; }
+.river-trend.trend-falling { color: #17806b; }
+.river-gauge { height: 8px; margin-bottom: 12px; overflow: hidden; border-radius: 99px; background: #edf1ef; }
+.river-fill { display: block; height: 100%; border-radius: 99px; transition: width .4s; }
+.river-fill.river-normal { background: #2fa87a; }
+.river-fill.river-watch { background: #e0a13a; }
+.river-fill.river-alert { background: #e07a3a; }
+.river-fill.river-warning { background: #d1493f; }
+.river-thresholds { font-size: 10px !important; font-weight: 600 !important; line-height: 1.5; }
+.bar-w-0 { width: 0; }

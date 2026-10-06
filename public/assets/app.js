@@ -397,3 +397,63 @@ if (locationMap) {
     refresh();
     setInterval(refresh, 15000);
 })();
+
+(() => {
+    const page = document.querySelector('[data-river-page]');
+    if (!page) return;
+    const levels = JSON.parse(page.dataset.levels || '{}');
+    const fmt = (value) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
+    const levelOf = (cm, thresholds) => ['watch', 'alert', 'warning'].reduce((found, key) => {
+        const t = thresholds[key];
+        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
+    }, 'normal');
+    const trends = { rising: ['▲ Naik', 'rising'], falling: ['▼ Turun', 'falling'], steady: ['■ Stabil', 'steady'] };
+    const source = page.querySelector('[data-river-source]');
+    const set = (card, field, text) => { const node = card.querySelector('[data-field="' + field + '"]'); if (node) node.textContent = text; };
+    const stat = (name, value) => { const node = page.querySelector('[data-river-' + name + ']'); if (node) node.textContent = value; };
+
+    const refresh = async () => {
+        try {
+            const response = await fetch(page.dataset.feedUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('feed');
+            const data = await response.json();
+            let alerting = 0; let rising = 0; let max = 0;
+            data.stations.forEach((row) => {
+                const card = page.querySelector('[data-river-station="' + CSS.escape(row.code) + '"]');
+                if (!card) return;
+                const thresholds = (data.thresholds && data.thresholds[row.code]) || {};
+                const cm = Number(row.water_level_cm);
+                const change = Number(row.change_1h_cm);
+                const level = levelOf(cm, thresholds);
+                const trend = change >= 2 ? 'rising' : (change <= -2 ? 'falling' : 'steady');
+                max = Math.max(max, cm);
+                if (level !== 'normal') alerting += 1;
+                if (trend === 'rising') rising += 1;
+                set(card, 'level_cm', fmt(cm));
+                set(card, 'change', (change > 0 ? '+' : '') + fmt(change));
+                set(card, 'rain', fmt(row.rain_upstream_mm_h));
+                set(card, 'flow', fmt(row.flow_m3s));
+                set(card, 'time', clock(row.observed_at));
+                set(card, 'trend', trends[trend][0]);
+                card.querySelector('[data-field="trend"]').className = 'river-trend trend-' + trend;
+                const badge = card.querySelector('[data-field="level"]');
+                badge.textContent = levels[level];
+                badge.className = 'weather-level river-' + level;
+                const top = Math.max(300, ...Object.values(thresholds).map((t) => t.value * 1.25));
+                const pct = Math.min(100, Math.round(cm / top * 100 / 5) * 5);
+                card.querySelector('[data-field="gauge"]').className = 'river-fill river-' + level + ' bar-w-' + pct;
+            });
+            stat('alerting', String(alerting));
+            stat('rising', String(rising));
+            stat('max', fmt(max));
+            stat('updated', clock(data.generated_at));
+            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
+            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+        } catch (error) {
+            source.className = 'weather-source error';
+            source.lastChild.textContent = 'Gagal memuat data';
+        }
+    };
+    setInterval(refresh, 15000);
+})();
