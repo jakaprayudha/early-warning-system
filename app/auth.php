@@ -293,6 +293,10 @@ function update_user_access(
                 throw new InvalidArgumentException('Akun tidak ditemukan.');
             }
 
+            if ($actorId === $targetId && ($status !== 'active' || $role !== $before['role'])) {
+                throw new InvalidArgumentException('Anda tidak dapat mengubah peran atau menonaktifkan akun Anda sendiri.');
+            }
+
             if ($before['role'] === 'system_admin'
                 && $before['status'] === 'active'
                 && ($role !== 'system_admin' || $status !== 'active')) {
@@ -945,13 +949,13 @@ function send_password_reset(string $email, string $name, string $token): bool
     return mail($email, $subject, $body, $headers);
 }
 
-function issue_password_reset(string $email): void
+function issue_password_reset(string $email): bool
 {
     $statement = db()->prepare('SELECT id, name, email FROM users WHERE email = :email');
     $statement->execute(['email' => $email]);
     $user = $statement->fetch();
     if (!$user) {
-        return;
+        return false;
     }
 
     $token = bin2hex(random_bytes(32));
@@ -981,7 +985,10 @@ function issue_password_reset(string $email): void
 
     if (!send_password_reset($user['email'], $user['name'], $token)) {
         error_log('Password reset email delivery failed for user ID ' . $user['id'] . '.');
+        return false;
     }
+
+    return true;
 }
 
 function valid_reset_token(string $token): bool
@@ -1043,4 +1050,90 @@ function update_password_from_token(string $token, string $password): bool
         }
         throw $error;
     }
+}
+
+function create_user_account(
+    int $actorId,
+    string $name,
+    string $email,
+    string $role,
+    array $regionIds,
+    string $reason
+): int {
+    $name = trim($name);
+    $email = strtolower(trim($email));
+    $nameLength = (int) preg_match_all('/./us', $name);
+    if ($nameLength < 2 || $nameLength > 100) {
+        throw new InvalidArgumentException('Nama wajib 2–100 karakter.');
+    }
+    if (strlen($email) > 160 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        throw new InvalidArgumentException('Alamat email tidak valid.');
+    }
+    if (!array_key_exists($role, role_labels())) {
+        throw new InvalidArgumentException('Peran tidak valid.');
+    }
+    $regionIds = array_values(array_unique(array_map('intval', $regionIds)));
+    if ($role !== 'system_admin' && $regionIds === []) {
+        throw new InvalidArgumentException('Pilih minimal satu wilayah untuk peran ini.');
+    }
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        if ($regionIds !== []) {
+            $check = $connection->prepare(
+                'SELECT COUNT(*) FROM regions WHERE id IN (' . implode(',', array_fill(0, count($regionIds), '?')) . ')'
+            );
+            $check->execute($regionIds);
+            if ((int) $check->fetchColumn() !== count($regionIds)) {
+                throw new InvalidArgumentException('Satu atau lebih wilayah tidak ditemukan.');
+            }
+        }
+        $connection->prepare(
+            'INSERT INTO users (name, email, password_hash, role, status, created_at)
+             VALUES (:name, :email, :hash, :role, "active", :now)'
+        )->execute([
+            'name' => $name, 'email' => $email, 'role' => $role, 'now' => time(),
+            'hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+        ]);
+        $userId = (int) $connection->lastInsertId();
+        $scope = $connection->prepare('INSERT INTO user_regions (user_id, region_id) VALUES (:user, :region)');
+        foreach ($regionIds as $regionId) {
+            $scope->execute(['user' => $userId, 'region' => $regionId]);
+        }
+        $connection->prepare(
+            'INSERT INTO access_audit_log (actor_id, target_user_id, action, details, reason, created_at)
+             VALUES (:actor, :target, "user.created", :details, :reason, :now)'
+        )->execute([
+            'actor' => $actorId, 'target' => $userId, 'reason' => $reason, 'now' => time(),
+            'details' => json_encode(['role' => $role, 'region_ids' => $regionIds], JSON_THROW_ON_ERROR),
+        ]);
+        $connection->commit();
+
+        return $userId;
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function send_user_reset(int $actorId, int $targetId, string $reason): bool
+{
+    $statement = db()->prepare('SELECT email FROM users WHERE id = :id');
+    $statement->execute(['id' => $targetId]);
+    $email = $statement->fetchColumn();
+    if (!is_string($email)) {
+        throw new InvalidArgumentException('Akun tidak ditemukan.');
+    }
+    $sent = issue_password_reset($email);
+    db()->prepare(
+        'INSERT INTO access_audit_log (actor_id, target_user_id, action, details, reason, created_at)
+         VALUES (:actor, :target, "user.reset_requested", :details, :reason, :now)'
+    )->execute([
+        'actor' => $actorId, 'target' => $targetId, 'reason' => $reason, 'now' => time(),
+        'details' => json_encode(['email_sent' => $sent], JSON_THROW_ON_ERROR),
+    ]);
+
+    return $sent;
 }

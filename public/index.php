@@ -627,6 +627,36 @@ if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $reason
             );
             flash('message', 'Akses akun berhasil diperbarui.');
+        } elseif ($action === 'create_user' || $action === 'send_reset') {
+            $reason = trim(post_value('reason'));
+            $reasonLength = preg_match_all('/./us', $reason);
+            if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+                throw new InvalidArgumentException('Alasan wajib diisi (3–500 karakter).');
+            }
+            if ($action === 'create_user') {
+                $regions = $_POST['region_ids'] ?? [];
+                if (!is_array($regions) || array_filter($regions, static fn(mixed $r): bool => !is_string($r) || !ctype_digit($r)) !== []) {
+                    throw new InvalidArgumentException('Cakupan wilayah tidak valid.');
+                }
+                $newId = create_user_account(
+                    (int) $user['id'],
+                    post_value('name'),
+                    post_value('email'),
+                    post_value('role'),
+                    array_map('intval', $regions),
+                    $reason
+                );
+                $sent = send_user_reset((int) $user['id'], $newId, 'Undangan akun baru');
+                flash('message', $sent
+                    ? 'Akun dibuat. Tautan atur password dikirim ke email pengguna.'
+                    : 'Akun dibuat, tetapi email belum terkirim (periksa APP_BASE_URL dan APP_MAIL_FROM). Gunakan "Kirim tautan reset" setelah email dikonfigurasi.');
+            } else {
+                $targetId = (int) filter_var(post_value('user_id'), FILTER_VALIDATE_INT);
+                $sent = send_user_reset((int) $user['id'], $targetId, $reason);
+                flash($sent ? 'message' : 'error', $sent
+                    ? 'Tautan reset password dikirim.'
+                    : 'Email reset tidak terkirim. Periksa konfigurasi email (APP_BASE_URL dan APP_MAIL_FROM).');
+            }
         } else {
             throw new InvalidArgumentException('Tindakan administrator tidak dikenal.');
         }

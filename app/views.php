@@ -1049,68 +1049,128 @@ function render_admin_page(
         <?php if ($message !== null): ?><div class="notice" role="status"><?= e($message) ?></div><?php endif; ?>
         <?php if ($error !== null): ?><div class="admin-error" role="alert"><?= e($error) ?></div><?php endif; ?>
 
+        <?php
+        $q = is_string($_GET['q'] ?? null) ? trim($_GET['q']) : '';
+        $fRole = is_string($_GET['role'] ?? null) && isset($roles[$_GET['role']]) ? $_GET['role'] : '';
+        $fStatus = is_string($_GET['status'] ?? null) && isset($statuses[$_GET['status']]) ? $_GET['status'] : '';
+        $counts = array_fill_keys(array_keys($statuses), 0);
+        foreach ($users as $u) {
+            $counts[$u['status']] = ($counts[$u['status']] ?? 0) + 1;
+        }
+        $shown = array_values(array_filter($users, static fn(array $u): bool =>
+            ($fRole === '' || $u['role'] === $fRole)
+            && ($fStatus === '' || $u['status'] === $fStatus)
+            && ($q === '' || stripos($u['name'] . ' ' . $u['email'], $q) !== false)));
+        ?>
+        <div class="sensor-summary threshold-summary">
+            <div class="sensor-summary-item approval-tile"><strong><?= count($users) ?></strong><span>Total akun</span></div>
+            <div class="sensor-summary-item approval-tile approval-tile-approved"><strong><?= (int) $counts['active'] ?></strong><span>Aktif</span></div>
+            <div class="sensor-summary-item approval-tile approval-tile-pending"><strong><?= (int) $counts['pending'] ?></strong><span>Menunggu persetujuan</span></div>
+            <div class="sensor-summary-item approval-tile approval-tile-rejected"><strong><?= (int) $counts['suspended'] ?></strong><span>Ditangguhkan</span></div>
+        </div>
+
+        <section class="admin-section">
+            <details class="create-details">
+                <summary><span>+ Tambah pengguna</span></summary>
+                <form class="hazard-form" method="post" action="/?page=admin">
+                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                    <input type="hidden" name="action" value="create_user">
+                    <label>Nama lengkap<input name="name" maxlength="100" required></label>
+                    <label>Email<input name="email" type="email" maxlength="160" required autocomplete="off"></label>
+                    <label>Peran<select name="role" required><?php foreach ($roles as $role => $label): ?><option value="<?= e($role) ?>" <?= $role === 'observer' ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
+                    <fieldset class="region-picker hazard-description">
+                        <legend>Wilayah (wajib kecuali administrator sistem)</legend>
+                        <div class="region-options">
+                            <?php foreach ($regions as $region): ?>
+                                <label class="region-option"><input type="checkbox" name="region_ids[]" value="<?= (int) $region['id'] ?>"><span><?= str_repeat('— ', $regionDepths[(int) $region['id']]) ?><?= e($region['name']) ?> <small><?= e($region['code']) ?></small></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </fieldset>
+                    <label class="hazard-reason">Alasan<input name="reason" maxlength="500" required></label>
+                    <button class="save-button" type="submit">Buat akun &amp; kirim undangan</button>
+                </form>
+                <p class="scope-hint">Pengguna menerima tautan email untuk menetapkan password sendiri (berlaku 60 menit). Admin tidak pernah melihat password.</p>
+            </details>
+        </section>
+
         <section class="admin-section">
             <div class="section-heading">
-                <div><p class="eyebrow">AKUN</p><h2>Daftar pengguna <span><?= count($users) ?></span></h2></div>
+                <div><p class="eyebrow">AKUN</p><h2>Daftar pengguna <span><?= count($shown) ?></span></h2></div>
             </div>
-            <?php if ($users === []): ?>
-                <p class="empty-state">Belum ada akun pengguna.</p>
+            <form class="location-filter" method="get" action="/">
+                <input type="hidden" name="page" value="admin">
+                <input type="search" name="q" value="<?= e($q) ?>" placeholder="Cari nama atau email" aria-label="Cari">
+                <select name="role" aria-label="Peran"><option value="">Semua peran</option><?php foreach ($roles as $role => $label): ?><option value="<?= e($role) ?>" <?= $fRole === $role ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
+                <select name="status" aria-label="Status"><option value="">Semua status</option><?php foreach ($statuses as $status => $label): ?><option value="<?= e($status) ?>" <?= $fStatus === $status ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
+                <button class="save-button" type="submit">Terapkan</button>
+            </form>
+            <?php if ($shown === []): ?>
+                <p class="empty-state">Tidak ada akun yang cocok.</p>
             <?php else: ?>
                 <div class="user-list">
-                    <?php foreach ($users as $managedUser): ?>
-                        <form class="user-card" method="post" action="/?page=admin">
-                            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-                            <input type="hidden" name="action" value="update_user">
-                            <input type="hidden" name="user_id" value="<?= (int) $managedUser['id'] ?>">
+                    <?php foreach ($shown as $managedUser): $uid = (int) $managedUser['id']; $isSelf = $uid === (int) $admin['id']; ?>
+                        <article class="user-card">
                             <div class="user-identity">
                                 <div class="avatar"><?= e(strtoupper(substr($managedUser['name'], 0, 1))) ?></div>
                                 <div>
-                                    <strong><?= e($managedUser['name']) ?></strong>
-                                    <p><?= e($managedUser['email']) ?></p>
+                                    <strong><?= e($managedUser['name']) ?><?= $isSelf ? ' (Anda)' : '' ?></strong>
+                                    <p><?= e($managedUser['email']) ?> · <?= e($roles[$managedUser['role']] ?? $managedUser['role']) ?></p>
                                 </div>
                                 <span class="status-badge status-<?= e($managedUser['status']) ?>"><?= e($statuses[$managedUser['status']] ?? $managedUser['status']) ?></span>
                             </div>
-                            <div class="user-access-fields">
-                                <div>
-                                    <label for="role-<?= (int) $managedUser['id'] ?>">Peran</label>
-                                    <select id="role-<?= (int) $managedUser['id'] ?>" name="role">
-                                        <?php foreach ($roles as $role => $label): ?>
-                                            <option value="<?= e($role) ?>" <?= $managedUser['role'] === $role ? 'selected' : '' ?>><?= e($label) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="status-<?= (int) $managedUser['id'] ?>">Status akun</label>
-                                    <select id="status-<?= (int) $managedUser['id'] ?>" name="status">
-                                        <?php foreach ($statuses as $status => $label): ?>
-                                            <option value="<?= e($status) ?>" <?= $managedUser['status'] === $status ? 'selected' : '' ?>><?= e($label) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
+                            <div class="scope-chips">
+                                <?php if ($managedUser['role'] === 'system_admin'): ?><span class="chip-unit">Seluruh wilayah</span>
+                                <?php elseif ($managedUser['region_ids'] === []): ?><span class="warn-chip">Belum ada wilayah</span>
+                                <?php else: foreach ($managedUser['region_ids'] as $rid): if (isset($regionsById[$rid])): ?><span class="chip-unit"><?= e($regionsById[$rid]['name']) ?></span><?php endif; endforeach; endif; ?>
                             </div>
-                            <fieldset class="region-picker">
-                                <legend>Wilayah yang ditetapkan</legend>
-                                <?php if ($regions === []): ?>
-                                    <p class="scope-hint">Tambahkan wilayah di bagian bawah sebelum menetapkan cakupan.</p>
-                                <?php else: ?>
-                                    <div class="region-options">
-                                        <?php foreach ($regions as $region): ?>
-                                            <label class="region-option">
-                                                <input type="checkbox" name="region_ids[]" value="<?= (int) $region['id'] ?>" <?= in_array((int) $region['id'], $managedUser['region_ids'], true) ? 'checked' : '' ?>>
-                                                <span><?= str_repeat('— ', $regionDepths[(int) $region['id']]) ?><?= e($region['name']) ?> <small><?= e($region['code']) ?></small></span>
-                                            </label>
-                                        <?php endforeach; ?>
+                            <details class="edit-details">
+                                <summary>Ubah akses</summary>
+                                <form id="user-<?= $uid ?>" method="post" action="/?page=admin">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="action" value="update_user">
+                                    <input type="hidden" name="user_id" value="<?= $uid ?>">
+                                    <div class="user-access-fields">
+                                        <div>
+                                            <label for="role-<?= $uid ?>">Peran</label>
+                                            <select id="role-<?= $uid ?>" name="role">
+                                                <?php foreach ($roles as $role => $label): ?><option value="<?= e($role) ?>" <?= $managedUser['role'] === $role ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="status-<?= $uid ?>">Status akun</label>
+                                            <select id="status-<?= $uid ?>" name="status">
+                                                <?php foreach ($statuses as $status => $label): ?><option value="<?= e($status) ?>" <?= $managedUser['status'] === $status ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
-                                <?php endif; ?>
-                                <p class="scope-hint">Memilih wilayah induk otomatis memberi cakupan ke seluruh turunannya.</p>
-                            </fieldset>
-                            <div class="user-save-row">
-                                <label class="reason-field">Alasan perubahan
-                                    <input type="text" name="reason" maxlength="500" placeholder="Contoh: persetujuan akses wilayah pilot" required>
-                                </label>
-                                <button class="save-button" type="submit">Simpan akses</button>
-                            </div>
-                        </form>
+                                    <fieldset class="region-picker">
+                                        <legend>Wilayah yang ditetapkan</legend>
+                                        <div class="region-options">
+                                            <?php foreach ($regions as $region): ?>
+                                                <label class="region-option">
+                                                    <input type="checkbox" name="region_ids[]" value="<?= (int) $region['id'] ?>" <?= in_array((int) $region['id'], $managedUser['region_ids'], true) ? 'checked' : '' ?>>
+                                                    <span><?= str_repeat('— ', $regionDepths[(int) $region['id']]) ?><?= e($region['name']) ?> <small><?= e($region['code']) ?></small></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <p class="scope-hint">Memilih wilayah induk otomatis memberi cakupan ke seluruh turunannya.</p>
+                                    </fieldset>
+                                    <div class="user-save-row">
+                                        <label class="reason-field">Alasan perubahan
+                                            <input type="text" name="reason" maxlength="500" placeholder="Contoh: persetujuan akses wilayah pilot" required>
+                                        </label>
+                                        <button class="save-button" type="submit">Simpan akses</button>
+                                    </div>
+                                </form>
+                                <form class="token-actions" method="post" action="/?page=admin">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="action" value="send_reset">
+                                    <input type="hidden" name="user_id" value="<?= $uid ?>">
+                                    <input name="reason" maxlength="500" required placeholder="Alasan kirim reset" aria-label="Alasan kirim reset">
+                                    <button class="save-button" type="submit">Kirim tautan reset password</button>
+                                </form>
+                            </details>
+                        </article>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>

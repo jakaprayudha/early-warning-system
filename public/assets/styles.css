@@ -794,3 +794,9 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .health-badge-delayed { background: #fee2e2; color: #991b1b; }
 .health-badge-unknown, .health-badge-maintenance { background: #fef3c7; color: #92400e; }
 @media (max-width: 900px) { .check-list { grid-template-columns: 1fr; } .threshold-summary:has(> :nth-child(5)) { grid-template-columns: repeat(2, 1fr); } }
+
+.scope-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.user-card .edit-details { margin-top: 10px; }
+.user-card .token-actions { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.user-card .token-actions input { width: 220px; }
+.scope-chips .chip-unit { padding: 3px 10px; border-radius: 999px; background: #e6f4f1; color: #0f766e; font-size: 11px; font-weight: 700; }
