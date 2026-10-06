@@ -241,6 +241,45 @@ function db(): PDO
     );
     $connection->exec('CREATE INDEX IF NOT EXISTS thresholds_parameter ON thresholds(parameter_id)');
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS alert_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            hazard_code TEXT NOT NULL COLLATE NOCASE REFERENCES hazard_types(code)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+            severity TEXT NOT NULL CHECK (severity IN ("watch", "alert", "warning")),
+            combine_mode TEXT NOT NULL DEFAULT "all" CHECK (combine_mode IN ("all", "any")),
+            recipient_group TEXT NOT NULL,
+            channels TEXT NOT NULL,
+            repeat_interval_minutes INTEGER NOT NULL DEFAULT 0 CHECK (repeat_interval_minutes BETWEEN 0 AND 10080),
+            ack_timeout_minutes INTEGER NOT NULL DEFAULT 30 CHECK (ack_timeout_minutes BETWEEN 1 AND 10080),
+            active_from TEXT,
+            active_until TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            notes TEXT NOT NULL DEFAULT "",
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS alert_rule_conditions (
+            rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+            threshold_id INTEGER NOT NULL REFERENCES thresholds(id) ON DELETE RESTRICT,
+            PRIMARY KEY (rule_id, threshold_id)
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS alert_rule_escalations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+            after_minutes INTEGER NOT NULL CHECK (after_minutes BETWEEN 1 AND 10080),
+            recipient_group TEXT NOT NULL,
+            channels TEXT NOT NULL
+        )'
+    );
+    $connection->exec('CREATE INDEX IF NOT EXISTS alert_rule_escalations_rule ON alert_rule_escalations(rule_id)');
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token_hash TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

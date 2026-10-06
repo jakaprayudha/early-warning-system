@@ -9,6 +9,8 @@ require dirname(__DIR__) . '/app/sensors.php';
 require dirname(__DIR__) . '/app/sensors_views.php';
 require dirname(__DIR__) . '/app/thresholds.php';
 require dirname(__DIR__) . '/app/thresholds_views.php';
+require dirname(__DIR__) . '/app/rules.php';
+require dirname(__DIR__) . '/app/rules_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -379,6 +381,56 @@ if ($page === 'dashboard'
         flash('error', 'Kode sudah digunakan atau data masih dipakai.');
     }
     redirect_to('/?page=dashboard&section=' . $section);
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'rules'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'rules');
+        exit;
+    }
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan wajib diisi (3–500 karakter).');
+        }
+        if (in_array($action, ['create_rule', 'update_rule'], true)) {
+            $data = parse_rule_input($_POST);
+            if ($action === 'update_rule' && $data['id'] < 1) {
+                throw new InvalidArgumentException('Aturan tidak valid.');
+            }
+            save_alert_rule($user, $action, $data, $reason);
+            flash('message', $action === 'create_rule' ? 'Aturan berhasil ditambahkan.' : 'Aturan berhasil diperbarui.');
+        } elseif ($action === 'delete_rule') {
+            delete_alert_rule($user, (int) filter_var(post_value('rule_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Aturan dihapus.');
+        } elseif ($action === 'add_step') {
+            add_rule_step($user, $_POST, $reason);
+            flash('message', 'Langkah eskalasi ditambahkan.');
+        } elseif ($action === 'delete_step') {
+            delete_rule_step($user, (int) filter_var(post_value('step_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Langkah eskalasi dihapus.');
+        } else {
+            throw new InvalidArgumentException('Tindakan tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'Data tidak dapat disimpan karena masih terkait data lain.');
+    }
+    redirect_to('/?page=dashboard&section=rules');
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {

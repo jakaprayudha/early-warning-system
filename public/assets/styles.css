@@ -683,3 +683,25 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .parameter-desc { margin: 10px 0 0; font-size: 13px; color: #64748b; }
 .parameter-card .edit-details { margin-top: 12px; }
 @media (max-width: 900px) { .parameter-grid { grid-template-columns: 1fr; } }
+
+.rule-card.is-off { opacity: .8; }
+.rule-flow { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-top: 14px; }
+.rule-step-box { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; background: #f3f7f9; }
+.rule-step-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: #0f766e; }
+.rule-arrow { align-self: center; font-size: 22px; color: #94a3b8; }
+.condition-pill { display: inline-block; padding: 4px 10px; border-radius: 8px; background: #fff; border: 1px solid #dfe8ec; font-size: 13px; font-weight: 600; }
+.rule-channels { font-size: 12px; color: #64748b; }
+.escalation-timeline { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #dfe8ec; }
+.escalation-timeline ol { list-style: none; margin: 10px 0; padding: 0 0 0 14px; border-left: 3px solid #cfe3e0; display: grid; gap: 10px; }
+.escalation-timeline li { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: relative; }
+.escalation-timeline li::before { content: ""; position: absolute; left: -22px; width: 11px; height: 11px; border-radius: 50%; background: #0f9d8a; border: 2px solid #fff; }
+.step-time { padding: 3px 9px; border-radius: 999px; background: #e0f4ee; color: #0f766e; font-size: 12px; font-weight: 700; }
+.escalation-timeline li small { color: #64748b; margin-left: 6px; }
+.rule-fieldset { border: 1px solid #dfe8ec; border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.rule-fieldset legend { font-size: 12px; font-weight: 700; color: #475569; padding: 0 6px; }
+.channel-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.channel-check, .condition-check { display: flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.channel-check span { padding: 5px 12px; border-radius: 999px; background: #eef2f6; font-size: 13px; font-weight: 600; }
+.channel-check input:checked + span { background: #0f9d8a; color: #fff; }
+.condition-check { padding: 6px 4px; }
+.condition-check small { color: #64748b; margin-left: 6px; }

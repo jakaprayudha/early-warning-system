@@ -402,6 +402,8 @@ function render_dashboard(array $user, string $section = 'overview'): void
         render_parameters_page($user, flash('message'), flash('error'));
     } elseif ($section === 'thresholds') {
         render_thresholds_page($user, flash('message'), flash('error'));
+    } elseif ($section === 'rules') {
+        render_rules_page($user, flash('message'), flash('error'));
     } elseif ($section === 'locations') {
         render_locations_page($user, flash('message'), flash('error'));
     } else {
