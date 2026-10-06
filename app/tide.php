@@ -83,27 +83,45 @@ function tide_stations(array $user): array
     return $stations;
 }
 
+function tide_dummy_row(string $code, int $at): array
+{
+    $seed = crc32($code) % 1000;
+    $phase = ($seed % 60) * 60;
+    $level = static fn(int $t): float => max(0.1, 1.2 + 0.8 * sin(2 * M_PI * ($t + $phase) / 44712) + 0.05 * sin($t / 600 + $seed));
+    $current = $level($at);
+
+    return [
+        'code' => $code,
+        'observed_at' => gmdate('c', $at - $seed % 40),
+        'tide_level_m' => round($current, 2),
+        'change_1h_m' => round($current - $level($at - 3600), 2),
+        'wave_height_m' => round(max(0.1, 0.6 + 0.4 * sin($at / 700 + $seed)), 1),
+        'wind_kmh' => round(max(0.0, 14 + 8 * sin($at / 500 + $seed)), 1),
+    ];
+}
+
 // Pembangkit data simulasi; menggantikan respons JSON sensor sampai API asli tersedia.
 function tide_dummy_feed(array $codes): array
 {
     $now = time();
+
+    return [
+        'source' => 'dummy',
+        'generated_at' => gmdate('c', $now),
+        'stations' => array_map(static fn(mixed $code): array => tide_dummy_row((string) $code, $now), $codes),
+    ];
+}
+
+// Riwayat simulasi 3 jam terakhir (interval 2 menit) untuk grafik halaman detail.
+function tide_dummy_history(string $code): array
+{
+    $now = time();
     $rows = [];
-    foreach ($codes as $code) {
-        $seed = crc32((string) $code) % 1000;
-        $phase = ($seed % 60) * 60;
-        $level = static fn(int $t): float => 1.2 + 0.8 * sin(2 * M_PI * ($t + $phase) / 44712) + 0.05 * sin($t / 600 + $seed);
-        $current = max(0.1, $level($now));
-        $rows[] = [
-            'code' => (string) $code,
-            'observed_at' => gmdate('c', $now - $seed % 40),
-            'tide_level_m' => round($current, 2),
-            'change_1h_m' => round($current - $level($now - 3600), 2),
-            'wave_height_m' => round(max(0.1, 0.6 + 0.4 * sin($now / 700 + $seed)), 1),
-            'wind_kmh' => round(max(0.0, 14 + 8 * sin($now / 500 + $seed)), 1),
-        ];
+    for ($i = 90; $i >= 1; $i--) {
+        $rows[] = tide_dummy_row($code, $now - $i * 120);
     }
 
-    return ['source' => 'dummy', 'generated_at' => gmdate('c', $now), 'stations' => $rows];
+    return $rows;
 }
 
 function tide_fetch_feed(array $codes): array
@@ -135,13 +153,35 @@ function handle_tide_feed(array $user): never
         http_response_code(403);
         exit('{"error":"forbidden"}');
     }
-    $codes = array_map(static fn(array $s): string => (string) $s['code'], tide_stations($user));
-    $feed = tide_fetch_feed($codes);
+    $stations = tide_stations($user);
+    $only = $_GET['code'] ?? null;
+    if (is_string($only)) {
+        $stations = array_values(array_filter($stations, static fn(array $s): bool => $s['code'] === $only));
+        if ($stations === []) {
+            http_response_code(404);
+            exit('{"error":"not_found"}');
+        }
+    }
+    $feed = tide_fetch_feed(array_map(static fn(array $s): string => (string) $s['code'], $stations));
     $thresholds = [];
-    foreach (tide_stations($user) as $station) {
+    foreach ($stations as $station) {
         $thresholds[$station['code']] = $station['thresholds'];
     }
     $feed['thresholds'] = $thresholds;
+    if (is_string($only) && ($_GET['history'] ?? '') === '1') {
+        $feed['history'] = $feed['source'] === 'dummy' ? tide_dummy_history($only) : [];
+    }
     echo json_encode($feed, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+function tide_find_station(array $user, string $code): ?array
+{
+    foreach (tide_stations($user) as $station) {
+        if ($station['code'] === $code) {
+            return $station;
+        }
+    }
+
+    return null;
 }

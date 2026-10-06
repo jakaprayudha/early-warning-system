@@ -75,6 +75,7 @@ function render_tide_page(array $user): void
                                 echo $parts === [] ? 'Belum ada' : e(implode(' · ', $parts));
                                 ?></dd></div>
                         </dl>
+                        <a class="weather-detail-link" href="/?page=tide-monitor&amp;code=<?= e(rawurlencode((string) $station['code'])) ?>">Buka monitoring penuh <span aria-hidden="true">↗</span></a>
                         <footer>
                             <span><code><?= e($station['code']) ?></code> · <?= e(number_format((float) $station['latitude'], 5, '.', '')) ?>, <?= e(number_format((float) $station['longitude'], 5, '.', '')) ?></span>
                             <span>Diamati <b data-field="time"><?= $r === null ? '—' : e($local((string) $r['observed_at'])) ?></b></span>
@@ -85,5 +86,68 @@ function render_tide_page(array $user): void
         <?php endif; ?>
         <p class="scope-hint">Status dihitung dari ambang tinggi pasang yang disetujui (cm di Parameter dikonversi ke meter) di Ambang &amp; persetujuan. Data simulasi tidak disimpan. Atur <code>APP_TIDE_FEED_URL</code> ke API JSON sensor (skema: <code>stations[].code, tide_level_m, change_1h_m, wave_height_m, wind_kmh, observed_at</code>) untuk memakai data asli.</p>
     </section>
+    <?php
+}
+
+function render_tide_monitor_page(array $station): void
+{
+    $levels = tide_levels();
+    $charts = [
+        ['tide_level_m', 'Tinggi pasang', 'm', '#2f80c9', 2, true],
+        ['change_1h_m', 'Perubahan 1 jam', 'm', '#d9822b', 2, false],
+        ['wave_height_m', 'Tinggi gelombang', 'm', '#17806b', 1, false],
+        ['wind_kmh', 'Kecepatan angin', 'km/jam', '#7a5bc2', 1, false],
+    ];
+    $url = '/?page=api-tide-feed&code=' . rawurlencode((string) $station['code']);
+    ?>
+    <!doctype html>
+    <html lang="id">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Monitoring <?= e($station['name']) ?> · EWS</title>
+        <link rel="stylesheet" href="/assets/styles.css">
+        <script src="/assets/app.js" defer></script>
+    </head>
+    <body class="monitor-body">
+    <main class="monitor-page" data-tide-monitor data-feed-url="<?= e($url . '&history=1') ?>" data-levels="<?= e(json_encode($levels, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>">
+        <header class="monitor-head">
+            <div>
+                <p class="eyebrow">MONITORING PASANG SURUT · REALTIME</p>
+                <h1><?= e($station['name']) ?></h1>
+                <p><?= e($station['region_label']) ?> · <code><?= e($station['code']) ?></code> · <?= e(number_format((float) $station['latitude'], 5, '.', '')) ?>, <?= e(number_format((float) $station['longitude'], 5, '.', '')) ?></p>
+            </div>
+            <div class="monitor-actions">
+                <span class="weather-source dummy" data-monitor-source><i></i>Memuat…</span>
+                <strong class="weather-clock" data-monitor-clock>--:--:--</strong>
+                <a class="button secondary" href="/?page=dashboard&amp;section=tide">← Kembali</a>
+            </div>
+        </header>
+        <section class="monitor-now monitor-now-5">
+            <article class="monitor-main"><span>Tinggi pasang</span><strong><span data-now="tide_level_m">—</span><small> m</small></strong><em class="weather-level river-normal" data-monitor-level>—</em></article>
+            <article><span>Tren</span><strong class="river-trend" data-now="trend">—</strong></article>
+            <article><span>Perubahan 1 jam</span><strong><span data-now="change_1h_m">—</span><small> m</small></strong></article>
+            <article><span>Tinggi gelombang</span><strong><span data-now="wave_height_m">—</span><small> m</small></strong></article>
+            <article><span>Angin</span><strong><span data-now="wind_kmh">—</span><small> km/jam</small></strong></article>
+            <article><span>Diamati</span><strong class="weather-clock" data-now="observed_at">—</strong></article>
+        </section>
+        <section class="monitor-charts">
+            <?php foreach ($charts as [$key, $title, $unit, $color, $digits, $wide]): ?>
+                <article class="monitor-chart <?= $wide ? 'wide' : '' ?>">
+                    <header><h2><?= e($title) ?></h2><span><?= e($unit) ?></span></header>
+                    <canvas data-chart="<?= e($key) ?>" data-color="<?= e($color) ?>" data-digits="<?= $digits ?>" <?= $wide ? 'data-thresholds="1"' : '' ?> role="img" aria-label="Grafik <?= e($title) ?>"></canvas>
+                </article>
+            <?php endforeach; ?>
+        </section>
+        <section class="panel monitor-table">
+            <h2>Data realtime terbaru</h2>
+            <table>
+                <thead><tr><th>Waktu</th><th>Tinggi pasang (m)</th><th>Perubahan 1 jam (m)</th><th>Gelombang (m)</th><th>Angin (km/jam)</th></tr></thead>
+                <tbody data-monitor-rows><tr><td colspan="5">Memuat…</td></tr></tbody>
+            </table>
+        </section>
+    </main>
+    </body>
+    </html>
     <?php
 }
