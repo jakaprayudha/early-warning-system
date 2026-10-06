@@ -176,6 +176,12 @@ function dashboard_sections(array $user): array
             'icon' => '≈',
             'permission' => 'dashboard',
         ],
+        'tornado' => [
+            'label' => 'Monitoring tornado',
+            'group' => 'Pemantauan',
+            'icon' => '◎',
+            'permission' => 'dashboard',
+        ],
         'hazards' => [
             'label' => 'Jenis bahaya',
             'group' => 'Master data',
@@ -394,6 +400,7 @@ function render_dashboard(array $user, string $section = 'overview'): void
         'weather' => ['Monitoring cuaca', 'MONITORING & PERINGATAN'],
         'river' => ['Monitoring sungai', 'MONITORING & PERINGATAN'],
         'tide' => ['Monitoring pasang surut', 'MONITORING & PERINGATAN'],
+        'tornado' => ['Monitoring tornado', 'MONITORING & PERINGATAN'],
         'hazards' => ['Jenis bahaya', 'KONFIGURASI MASTER DATA'],
         'locations' => ['Wilayah & lokasi', 'KONFIGURASI MASTER DATA'],
         'sensors' => ['Sensor & sumber data', 'KONFIGURASI MASTER DATA'],
@@ -417,6 +424,8 @@ function render_dashboard(array $user, string $section = 'overview'): void
         render_river_page($user);
     } elseif ($section === 'tide') {
         render_tide_page($user);
+    } elseif ($section === 'tornado') {
+        render_tornado_page($user);
     } elseif ($section === 'hazards') {
         render_hazard_types_page(
             list_hazard_types(),

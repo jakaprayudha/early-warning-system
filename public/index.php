@@ -27,6 +27,8 @@ require dirname(__DIR__) . '/app/river.php';
 require dirname(__DIR__) . '/app/river_views.php';
 require dirname(__DIR__) . '/app/tide.php';
 require dirname(__DIR__) . '/app/tide_views.php';
+require dirname(__DIR__) . '/app/tornado.php';
+require dirname(__DIR__) . '/app/tornado_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -49,6 +51,7 @@ $allowedPages = [
     'api-weather-feed',
     'api-river-feed',
     'api-tide-feed',
+    'api-tornado-feed',
     'logout',
 ];
 if (!is_string($page) || !in_array($page, $allowedPages, true)) {
@@ -108,6 +111,14 @@ if ($page === 'alerts' && !user_has_permission($user, 'handle_alerts')) {
     http_response_code(403);
     render_access_denied();
     exit;
+}
+if ($page === 'api-tornado-feed') {
+    if ($user === null) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"unauthorized"}');
+    }
+    handle_tornado_feed($user);
 }
 if ($page === 'api-tide-feed') {
     if ($user === null) {

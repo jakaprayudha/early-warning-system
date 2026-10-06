@@ -99,5 +99,11 @@ SELECT 4, 2, v.sev, '>=', v.val, v.val - 10, 10, v.pri, '2025-01-01', 1, 'approv
 FROM (SELECT 'watch' sev, 120.0 val, 40 pri UNION ALL SELECT 'alert', 150.0, 60 UNION ALL SELECT 'warning', 180.0, 80) v
 WHERE NOT EXISTS (SELECT 1 FROM thresholds WHERE parameter_id = 4 AND region_id = 2 AND approval_status = 'approved');
 
+-- Ambang kecepatan angin (km/jam) untuk tornado tingkat kabupaten
+INSERT INTO thresholds (parameter_id, region_id, severity, operator, value, reset_value, persistence_minutes, priority, valid_from, version, approval_status, notes, created_by, decided_by, decided_at, decision_reason, created_at, updated_at)
+SELECT (SELECT id FROM parameters WHERE code='wind_speed'), 2, v.sev, '>=', v.val, v.val - 5, 5, v.pri, '2025-01-01', 1, 'approved', 'Seed demo angin/tornado', 1, 2, strftime('%s','now'), 'Seed demo', strftime('%s','now'), strftime('%s','now')
+FROM (SELECT 'watch' sev, 40.0 val, 40 pri UNION ALL SELECT 'alert', 60.0, 60 UNION ALL SELECT 'warning', 90.0, 80) v
+WHERE NOT EXISTS (SELECT 1 FROM thresholds WHERE parameter_id=(SELECT id FROM parameters WHERE code='wind_speed') AND region_id=2 AND approval_status='approved');
+
 COMMIT;
 PRAGMA foreign_keys = ON;

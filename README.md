@@ -154,3 +154,11 @@ Menu **Pemantauan → Monitoring pasang surut** menampilkan pos pantai/muara (ba
 - Endpoint JSON: `GET /?page=api-tide-feed` (wajib login, dibatasi cakupan wilayah). Halaman memperbarui diri tiap 15 detik.
 - Tanpa konfigurasi, data berasal dari simulasi (tidak disimpan). Isi `APP_TIDE_FEED_URL` dengan URL http(s) API sensor asli; bila gagal, kembali ke simulasi.
 - Skema JSON: `{"generated_at": "...", "stations": [{"code": "DS-PAN-PALUH-KURAU", "observed_at": "...", "tide_level_m": 1.5, "change_1h_m": 0.2, "wave_height_m": 0.4, "wind_kmh": 18}]}`
+
+## Monitoring tornado
+
+Menu **Pemantauan → Monitoring tornado** menampilkan titik rawan tornado (bahaya `tornado`) beserta kecepatan angin terbaru. Status dihitung dari ambang `wind_speed` (km/jam) yang berstatus approved (seed: Waspada ≥40, Siaga ≥60, Awas ≥90).
+
+- Endpoint JSON: `GET /?page=api-tornado-feed` (wajib login, dibatasi cakupan wilayah); halaman memperbarui diri tiap 15 detik.
+- Tanpa konfigurasi, data berasal dari simulasi. Isi `APP_TORNADO_FEED_URL` dengan URL http(s) API sensor asli; bila gagal, kembali ke simulasi.
+- Skema JSON: `{"generated_at": "...", "stations": [{"code": "DS-TOR-PAYA-BAKUNG", "observed_at": "...", "wind_kmh": 52.5, "change_1h_kmh": -11.3, "gust_kmh": 62.9, "pressure_hpa": 1003.6}]}`
