@@ -259,8 +259,9 @@ function dashboard_sections(array $user): array
 
     return array_filter(
         $sections,
-        static fn (array $section): bool => $admin
-            || user_has_permission($user, $section['permission'])
+        static fn (string $key): bool => ($admin || user_has_permission($user, $sections[$key]['permission']))
+            && (!isset(ews_types()[$key]) || user_can_view_ews($user, $key)),
+        ARRAY_FILTER_USE_KEY
     );
 }
 
@@ -1137,6 +1138,8 @@ function render_admin_page(
     $statuses = status_labels();
     $csrf = e(csrf_token());
     $regionDepths = [];
+    $ewsByUser = user_ews_map();
+    $superAdminId = super_admin_id();
     $regionsById = [];
     foreach ($regions as $region) {
         $regionsById[(int) $region['id']] = $region;
@@ -1196,8 +1199,17 @@ function render_admin_page(
                             <?php endforeach; ?>
                         </div>
                     </fieldset>
+                    <fieldset class="region-picker hazard-description">
+                        <legend>EWS yang dikelola (kosong = semua EWS)</legend>
+                        <div class="region-options">
+                            <?php foreach (ews_labels() as $ewsCode => $ewsLabel): ?>
+                                <label class="region-option"><input type="checkbox" name="ews_codes[]" value="<?= e($ewsCode) ?>"><span><?= e($ewsLabel) ?></span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </fieldset>
+                    <label>Password (opsional, min. 12 karakter)<input name="password" type="password" minlength="12" maxlength="200" autocomplete="new-password" placeholder="Kosongkan untuk kirim undangan email"></label>
                     <label class="hazard-reason">Alasan<input name="reason" maxlength="500" required></label>
-                    <button class="save-button" type="submit">Buat akun &amp; kirim undangan</button>
+                    <button class="save-button" type="submit">Buat akun</button>
                 </form>
                 <p class="scope-hint">Pengguna menerima tautan email untuk menetapkan password sendiri (berlaku 60 menit). Admin tidak pernah melihat password.</p>
             </details>
@@ -1232,6 +1244,7 @@ function render_admin_page(
                                 <?php if ($managedUser['role'] === 'system_admin'): ?><span class="chip-unit">Seluruh wilayah</span>
                                 <?php elseif ($managedUser['region_ids'] === []): ?><span class="warn-chip">Belum ada wilayah</span>
                                 <?php else: foreach ($managedUser['region_ids'] as $rid): if (isset($regionsById[$rid])): ?><span class="chip-unit"><?= e($regionsById[$rid]['name']) ?></span><?php endif; endforeach; endif; ?>
+                                <?php if ($managedUser['role'] !== 'system_admin'): foreach ($ewsByUser[$uid] ?? [] as $ewsCode): ?><span class="chip-unit chip-ews"><?= e(ews_labels()[$ewsCode]) ?></span><?php endforeach; endif; ?>
                             </div>
                             <details class="edit-details">
                                 <summary>Ubah akses</summary>
@@ -1265,6 +1278,15 @@ function render_admin_page(
                                         </div>
                                         <p class="scope-hint">Memilih wilayah induk otomatis memberi cakupan ke seluruh turunannya.</p>
                                     </fieldset>
+                                    <fieldset class="region-picker">
+                                        <legend>EWS yang dikelola</legend>
+                                        <div class="region-options">
+                                            <?php foreach (ews_labels() as $ewsCode => $ewsLabel): ?>
+                                                <label class="region-option"><input type="checkbox" name="ews_codes[]" value="<?= e($ewsCode) ?>" <?= in_array($ewsCode, $ewsByUser[$uid] ?? [], true) ? 'checked' : '' ?>><span><?= e($ewsLabel) ?></span></label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <p class="scope-hint">Pengguna langsung masuk ke halaman EWS pertama yang ditetapkan. Kosongkan untuk akses ke semua EWS.</p>
+                                    </fieldset>
                                     <div class="user-save-row">
                                         <label class="reason-field">Alasan perubahan
                                             <input type="text" name="reason" maxlength="500" placeholder="Contoh: persetujuan akses wilayah pilot" required>
@@ -1272,6 +1294,23 @@ function render_admin_page(
                                         <button class="save-button" type="submit">Simpan akses</button>
                                     </div>
                                 </form>
+                                <form class="token-actions" method="post" action="/?page=admin">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="action" value="set_password">
+                                    <input type="hidden" name="user_id" value="<?= $uid ?>">
+                                    <input name="new_password" type="password" minlength="12" maxlength="200" required autocomplete="new-password" placeholder="Password baru (min. 12 karakter)" aria-label="Password baru">
+                                    <input name="reason" maxlength="500" required placeholder="Alasan atur password" aria-label="Alasan atur password">
+                                    <button class="save-button" type="submit">Atur password</button>
+                                </form>
+                                <?php if (!$isSelf && $uid !== $superAdminId): ?>
+                                <form class="token-actions" method="post" action="/?page=admin" data-confirm="Hapus akun ini secara permanen?">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="user_id" value="<?= $uid ?>">
+                                    <input name="reason" maxlength="500" required placeholder="Alasan hapus akun" aria-label="Alasan hapus akun">
+                                    <button class="save-button danger-button" type="submit">Hapus akun</button>
+                                </form>
+                                <?php endif; ?>
                                 <form class="token-actions" method="post" action="/?page=admin">
                                     <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
                                     <input type="hidden" name="action" value="send_reset">

@@ -270,7 +270,8 @@ function update_user_access(
     string $role,
     string $status,
     array $regionIds,
-    string $reason
+    string $reason,
+    array $ewsCodes = []
 ): void {
     if (!array_key_exists($role, role_labels()) || !array_key_exists($status, status_labels())) {
         throw new InvalidArgumentException('Peran atau status akun tidak valid.');
@@ -344,6 +345,9 @@ function update_user_access(
                     'Sistem harus memiliki setidaknya satu administrator aktif.'
                 );
             }
+            $beforeEws = user_ews_map()[$targetId] ?? [];
+            $ewsCodes = $role === 'system_admin' ? [] : $ewsCodes;
+            save_user_ews($targetId, $ewsCodes);
             $deleteScopes = $connection->prepare('DELETE FROM user_regions WHERE user_id = :user_id');
             $deleteScopes->execute(['user_id' => $targetId]);
             $addScope = $connection->prepare(
@@ -367,11 +371,13 @@ function update_user_access(
                         'role' => $before['role'],
                         'status' => $before['status'],
                         'region_ids' => $beforeScopes,
+                        'ews' => $beforeEws,
                     ],
                     'after' => [
                         'role' => $role,
                         'status' => $status,
                         'region_ids' => $validRegionIds,
+                        'ews' => $ewsCodes,
                     ],
                 ], JSON_THROW_ON_ERROR),
                 'reason' => $reason,
@@ -1058,7 +1064,9 @@ function create_user_account(
     string $email,
     string $role,
     array $regionIds,
-    string $reason
+    string $reason,
+    array $ewsCodes = [],
+    string $password = ''
 ): int {
     $name = trim($name);
     $email = strtolower(trim($email));
@@ -1071,6 +1079,9 @@ function create_user_account(
     }
     if (!array_key_exists($role, role_labels())) {
         throw new InvalidArgumentException('Peran tidak valid.');
+    }
+    if ($password !== '') {
+        assert_valid_new_password($password);
     }
     $regionIds = array_values(array_unique(array_map('intval', $regionIds)));
     if ($role !== 'system_admin' && $regionIds === []) {
@@ -1093,19 +1104,20 @@ function create_user_account(
              VALUES (:name, :email, :hash, :role, "active", :now)'
         )->execute([
             'name' => $name, 'email' => $email, 'role' => $role, 'now' => time(),
-            'hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+            'hash' => password_hash($password !== '' ? $password : bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
         ]);
         $userId = (int) $connection->lastInsertId();
         $scope = $connection->prepare('INSERT INTO user_regions (user_id, region_id) VALUES (:user, :region)');
         foreach ($regionIds as $regionId) {
             $scope->execute(['user' => $userId, 'region' => $regionId]);
         }
+        save_user_ews($userId, $role === 'system_admin' ? [] : $ewsCodes);
         $connection->prepare(
             'INSERT INTO access_audit_log (actor_id, target_user_id, action, details, reason, created_at)
              VALUES (:actor, :target, "user.created", :details, :reason, :now)'
         )->execute([
             'actor' => $actorId, 'target' => $userId, 'reason' => $reason, 'now' => time(),
-            'details' => json_encode(['role' => $role, 'region_ids' => $regionIds], JSON_THROW_ON_ERROR),
+            'details' => json_encode(['role' => $role, 'region_ids' => $regionIds, 'ews' => $ewsCodes, 'password_set' => $password !== ''], JSON_THROW_ON_ERROR),
         ]);
         $connection->commit();
 
@@ -1136,4 +1148,81 @@ function send_user_reset(int $actorId, int $targetId, string $reason): bool
     ]);
 
     return $sent;
+}
+
+
+function assert_valid_new_password(string $password): void
+{
+    if (strlen($password) < 12 || strlen($password) > 200) {
+        throw new InvalidArgumentException('Password minimal 12 karakter.');
+    }
+}
+
+// Super admin = administrator sistem tertua; akun ini tidak dapat dihapus.
+function super_admin_id(): int
+{
+    return (int) db()->query('SELECT MIN(id) FROM users WHERE role = "system_admin"')->fetchColumn();
+}
+
+function set_user_password(int $actorId, int $targetId, string $password, string $reason): void
+{
+    assert_valid_new_password($password);
+    $connection = db();
+    $exists = $connection->prepare('SELECT 1 FROM users WHERE id = ?');
+    $exists->execute([$targetId]);
+    if ($exists->fetchColumn() === false) {
+        throw new InvalidArgumentException('Akun tidak ditemukan.');
+    }
+    $connection->beginTransaction();
+    try {
+        $connection->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+            ->execute([password_hash($password, PASSWORD_DEFAULT), $targetId]);
+        $connection->prepare('DELETE FROM password_reset_tokens WHERE user_id = ?')->execute([$targetId]);
+        $connection->prepare(
+            'INSERT INTO access_audit_log (actor_id, target_user_id, action, details, reason, created_at)
+             VALUES (?, ?, "user.password_set", "{}", ?, ?)'
+        )->execute([$actorId, $targetId, $reason, time()]);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}
+
+function delete_user_account(int $actorId, int $targetId, string $reason): void
+{
+    if ($targetId === $actorId) {
+        throw new InvalidArgumentException('Anda tidak dapat menghapus akun sendiri.');
+    }
+    if ($targetId === super_admin_id()) {
+        throw new InvalidArgumentException('Akun super admin tidak dapat dihapus.');
+    }
+    $connection = db();
+    $row = $connection->prepare('SELECT email, name, role FROM users WHERE id = ?');
+    $row->execute([$targetId]);
+    $target = $row->fetch();
+    if (!$target) {
+        throw new InvalidArgumentException('Akun tidak ditemukan.');
+    }
+    $connection->beginTransaction();
+    try {
+        $connection->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+        $connection->prepare(
+            'INSERT INTO access_audit_log (actor_id, target_user_id, action, details, reason, created_at)
+             VALUES (?, NULL, "user.deleted", ?, ?, ?)'
+        )->execute([
+            $actorId,
+            json_encode(['id' => $targetId, 'email' => $target['email'], 'name' => $target['name'], 'role' => $target['role']], JSON_THROW_ON_ERROR),
+            $reason,
+            time(),
+        ]);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
 }

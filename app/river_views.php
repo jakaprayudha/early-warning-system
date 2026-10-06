@@ -110,6 +110,7 @@ function render_river_monitor_page(array $station): void
     </head>
     <body class="monitor-body">
     <main class="monitor-page" data-river-monitor data-feed-url="<?= e($url . '&history=1') ?>" data-levels="<?= e(json_encode($levels, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>">
+        <?php render_ews_bar('river', (string) $station['code']); ?>
         <header class="monitor-head">
             <div>
                 <p class="eyebrow">MONITORING SUNGAI · REALTIME</p>

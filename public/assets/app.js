@@ -1074,3 +1074,10 @@ if (locationMap) {
     setInterval(refresh, 5000);
 })();
 
+
+document.addEventListener('submit', (event) => {
+  const message = event.target.getAttribute && event.target.getAttribute('data-confirm');
+  if (message && !window.confirm(message)) {
+    event.preventDefault();
+  }
+});

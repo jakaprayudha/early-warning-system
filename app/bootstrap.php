@@ -82,6 +82,13 @@ function db(): PDO
         )'
     );
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS user_ews (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            ews_code TEXT NOT NULL CHECK (ews_code IN ("weather", "river", "tide", "tornado")),
+            PRIMARY KEY (user_id, ews_code)
+        )'
+    );
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS hazard_types (
             code TEXT PRIMARY KEY COLLATE NOCASE,
             name TEXT NOT NULL,

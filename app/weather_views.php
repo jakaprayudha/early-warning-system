@@ -93,6 +93,7 @@ function render_weather_monitor_page(array $station): void
     </head>
     <body class="monitor-body">
     <main class="monitor-page" data-weather-monitor data-feed-url="/?page=api-weather-feed&amp;code=<?= e(rawurlencode((string) $station['code'])) ?>&amp;history=1" data-levels="<?= e(json_encode($levels, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>">
+        <?php render_ews_bar('weather', (string) $station['code']); ?>
         <header class="monitor-head">
             <div>
                 <p class="eyebrow">MONITORING CUACA · REALTIME</p>

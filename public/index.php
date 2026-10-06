@@ -29,6 +29,7 @@ require dirname(__DIR__) . '/app/tide.php';
 require dirname(__DIR__) . '/app/tide_views.php';
 require dirname(__DIR__) . '/app/tornado.php';
 require dirname(__DIR__) . '/app/tornado_views.php';
+require dirname(__DIR__) . '/app/ews_access.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -50,6 +51,7 @@ $allowedPages = [
     'api-ingest',
     'api-weather-feed',
     'weather-monitor',
+    'ews',
     'api-river-feed',
     'river-monitor',
     'api-tide-feed',
@@ -120,7 +122,7 @@ if ($page === 'tornado-monitor') {
     if ($user === null) {
         redirect_to('/?page=login');
     }
-    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin') && user_can_view_ews($user, 'tornado')
         ? tornado_find_station($user, $_GET['code']) : null;
     if ($station === null) {
         http_response_code(404);
@@ -136,13 +138,18 @@ if ($page === 'api-tornado-feed') {
         header('Content-Type: application/json; charset=utf-8');
         exit('{"error":"unauthorized"}');
     }
+    if (!user_can_view_ews($user, 'tornado')) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"forbidden"}');
+    }
     handle_tornado_feed($user);
 }
 if ($page === 'tide-monitor') {
     if ($user === null) {
         redirect_to('/?page=login');
     }
-    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin') && user_can_view_ews($user, 'tide')
         ? tide_find_station($user, $_GET['code']) : null;
     if ($station === null) {
         http_response_code(404);
@@ -158,13 +165,18 @@ if ($page === 'api-tide-feed') {
         header('Content-Type: application/json; charset=utf-8');
         exit('{"error":"unauthorized"}');
     }
+    if (!user_can_view_ews($user, 'tide')) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"forbidden"}');
+    }
     handle_tide_feed($user);
 }
 if ($page === 'river-monitor') {
     if ($user === null) {
         redirect_to('/?page=login');
     }
-    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin') && user_can_view_ews($user, 'river')
         ? river_find_station($user, $_GET['code']) : null;
     if ($station === null) {
         http_response_code(404);
@@ -180,13 +192,24 @@ if ($page === 'api-river-feed') {
         header('Content-Type: application/json; charset=utf-8');
         exit('{"error":"unauthorized"}');
     }
+    if (!user_can_view_ews($user, 'river')) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"forbidden"}');
+    }
     handle_river_feed($user);
+}
+if ($page === 'ews') {
+    if ($user === null) {
+        redirect_to('/?page=login');
+    }
+    handle_ews_home($user);
 }
 if ($page === 'weather-monitor') {
     if ($user === null) {
         redirect_to('/?page=login');
     }
-    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin') && user_can_view_ews($user, 'weather')
         ? weather_find_station($user, $_GET['code']) : null;
     if ($station === null) {
         http_response_code(404);
@@ -201,6 +224,11 @@ if ($page === 'api-weather-feed') {
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
         exit('{"error":"unauthorized"}');
+    }
+    if (!user_can_view_ews($user, 'weather')) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"forbidden"}');
     }
     handle_weather_feed($user);
 }
@@ -737,9 +765,23 @@ if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 post_value('role'),
                 post_value('status'),
                 $regionIds,
-                $reason
+                $reason,
+                normalize_ews_codes($_POST['ews_codes'] ?? null)
             );
             flash('message', 'Akses akun berhasil diperbarui.');
+        } elseif ($action === 'set_password' || $action === 'delete_user') {
+            $reason = trim(post_value('reason'));
+            $targetId = (int) filter_var(post_value('user_id'), FILTER_VALIDATE_INT);
+            if ($reason === '' || strlen($reason) > 500) {
+                throw new InvalidArgumentException('Alasan wajib diisi (maks. 500 karakter).');
+            }
+            if ($action === 'set_password') {
+                set_user_password((int) $user['id'], $targetId, $_POST['new_password'] ?? '', $reason);
+                flash('message', 'Password akun berhasil diatur.');
+            } else {
+                delete_user_account((int) $user['id'], $targetId, $reason);
+                flash('message', 'Akun berhasil dihapus.');
+            }
         } elseif ($action === 'create_user' || $action === 'send_reset') {
             $reason = trim(post_value('reason'));
             $reasonLength = preg_match_all('/./us', $reason);
@@ -757,12 +799,18 @@ if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     post_value('email'),
                     post_value('role'),
                     array_map('intval', $regions),
-                    $reason
+                    $reason,
+                    normalize_ews_codes($_POST['ews_codes'] ?? null),
+                    is_string($_POST['password'] ?? null) ? $_POST['password'] : ''
                 );
-                $sent = send_user_reset((int) $user['id'], $newId, 'Undangan akun baru');
-                flash('message', $sent
+                $sent = is_string($_POST['password'] ?? null) && $_POST['password'] !== ''
+                    ? true
+                    : send_user_reset((int) $user['id'], $newId, 'Undangan akun baru');
+                flash('message', is_string($_POST['password'] ?? null) && $_POST['password'] !== ''
+                    ? 'Akun dibuat dengan password yang Anda tetapkan.'
+                    : ($sent
                     ? 'Akun dibuat. Tautan atur password dikirim ke email pengguna.'
-                    : 'Akun dibuat, tetapi email belum terkirim (periksa APP_BASE_URL dan APP_MAIL_FROM). Gunakan "Kirim tautan reset" setelah email dikonfigurasi.');
+                    : 'Akun dibuat, tetapi email belum terkirim (periksa APP_BASE_URL dan APP_MAIL_FROM). Gunakan "Kirim tautan reset" setelah email dikonfigurasi.'));
             } else {
                 $targetId = (int) filter_var(post_value('user_id'), FILTER_VALIDATE_INT);
                 $sent = send_user_reset((int) $user['id'], $targetId, $reason);
@@ -961,7 +1009,7 @@ if ($page === 'admin') {
 }
 
 if ($user !== null && in_array($page, ['login', 'signup'], true)) {
-    redirect_to('/?page=dashboard');
+    redirect_to(ews_landing_url($user));
 }
 
 $errors = [];
@@ -1051,7 +1099,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $page !== 'logout') {
                     );
                 }
                 sign_in((int) $account['id']);
-                redirect_to('/?page=dashboard');
+                $signedIn = signed_in_user();
+                redirect_to($signedIn === null ? '/?page=dashboard' : ews_landing_url($signedIn));
             }
         } elseif ($page === 'forgot-password') {
             $email = strtolower(trim(post_value('email')));

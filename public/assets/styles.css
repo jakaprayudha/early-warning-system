@@ -907,3 +907,15 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .monitor-now article strong > span { font-size: inherit; color: inherit; }
 .monitor-now-5 { grid-template-columns: 1.4fr repeat(5, 1fr); }
 .monitor-now .river-trend { margin-left: 0; font-size: 20px; }
+
+.ews-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.ews-tabs, .ews-stations { display: flex; gap: 8px; flex-wrap: wrap; }
+.ews-tabs a, .ews-stations a, .ews-account a { padding: 7px 14px; border: 1px solid #d5e0dc; border-radius: 999px; background: #fff; color: #17352d; font-weight: 700; font-size: 13px; text-decoration: none; }
+.ews-tabs a.active, .ews-stations a.active { background: #27856e; border-color: #27856e; color: #fff; }
+.ews-account { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.ews-account form { margin: 0; }
+.ews-account button { padding: 7px 14px; border: 1px solid #d5e0dc; border-radius: 999px; background: #fff; font-weight: 700; cursor: pointer; }
+.ews-stations { margin-bottom: 12px; }
+.chip-ews { background: #e3f2ee; color: #1d6b58; }
+
+.danger-button { background: #b3261e; border-color: #b3261e; }
