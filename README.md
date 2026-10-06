@@ -132,3 +132,10 @@ Menu `?page=dashboard&section=audit` (izin `manage_access`): tampilan baca-saja 
 ## Data demo utama: Deli Serdang
 
 `database/deli_serdang_demo.sql` (SQLite) menggantikan data demo Jawa Barat/DKI: Sumatera Utara → Kabupaten Deli Serdang → 11 kecamatan, 14 titik rawan (tornado, sungai, cuaca, pantai) dengan koordinat, 1 sensor per lokasi, serta kejadian, ambang, dan aturan yang diselaraskan. Jalankan: `sqlite3 storage/db_ews.sqlite < database/deli_serdang_demo.sql`.
+
+## Monitoring cuaca
+
+Menu `?page=dashboard&section=weather` (grup Pemantauan): menampilkan lokasi berbahaya **Cuaca** beserta pembacaan sensor terbaru (curah hujan mm/jam dan klasifikasinya, suhu, kelembapan, angin, tekanan). Browser memuat ulang data tiap 15 detik dari `GET /?page=api-weather-feed` (wajib login, dibatasi cakupan wilayah).
+
+- Saat ini data berasal dari **simulasi** (`weather_dummy_feed()` di `app/weather.php`), tidak disimpan ke database.
+- Untuk memakai API sensor asli, atur env `APP_WEATHER_FEED_URL` ke endpoint JSON dengan skema: `{"generated_at": "...", "stations": [{"code": "<kode lokasi>", "observed_at": "ISO8601", "rain_mm_h": 0, "temperature_c": 0, "humidity_pct": 0, "wind_kmh": 0, "wind_deg": 0, "pressure_hpa": 0}]}`. Bila gagal dibaca, tampilan kembali ke simulasi.

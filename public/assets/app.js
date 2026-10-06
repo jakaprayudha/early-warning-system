@@ -343,3 +343,57 @@ if (locationMap) {
     window.addEventListener('resize', render);
     fit();
 }
+
+(() => {
+    const page = document.querySelector('[data-weather-page]');
+    if (!page) return;
+    const levels = JSON.parse(page.dataset.levels || '{}');
+    const order = Object.keys(levels);
+    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    const levelOf = (rain) => order.reduce((found, key) => (levels[key].min > 0 && rain >= levels[key].min ? key : found), 'none');
+    const dirs = ['U', 'TL', 'T', 'TG', 'S', 'BD', 'B', 'BL'];
+    const set = (card, field, text) => {
+        const node = card.querySelector('[data-field="' + field + '"]');
+        if (node) node.textContent = text;
+    };
+    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
+    const sourceNode = page.querySelector('[data-weather-source]');
+
+    const refresh = async () => {
+        try {
+            const response = await fetch(page.dataset.feedUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('feed');
+            const data = await response.json();
+            const rains = [];
+            data.stations.forEach((row) => {
+                const card = page.querySelector('[data-weather-station="' + CSS.escape(row.code) + '"]');
+                if (!card) return;
+                const rain = Number(row.rain_mm_h);
+                rains.push(rain);
+                const level = levelOf(rain);
+                set(card, 'rain', fmt(rain));
+                set(card, 'temp', fmt(row.temperature_c));
+                set(card, 'hum', String(Math.round(row.humidity_pct)));
+                set(card, 'wind', fmt(row.wind_kmh));
+                set(card, 'dir', dirs[Math.round(((row.wind_deg % 360) + 360) % 360 / 45) % 8]);
+                set(card, 'pres', fmt(row.pressure_hpa));
+                set(card, 'time', clock(row.observed_at));
+                const badge = card.querySelector('[data-field="level"]');
+                badge.textContent = levels[level].label;
+                badge.className = 'weather-level level-' + level;
+            });
+            const stat = (name, value) => { const node = page.querySelector('[data-weather-' + name + ']'); if (node) node.textContent = value; };
+            stat('raining', String(rains.filter((v) => v >= 0.1).length));
+            stat('max', fmt(rains.length ? Math.max(...rains) : 0));
+            stat('avg', fmt(rains.length ? rains.reduce((a, b) => a + b, 0) / rains.length : 0));
+            stat('updated', clock(data.generated_at));
+            sourceNode.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
+            sourceNode.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+        } catch (error) {
+            sourceNode.className = 'weather-source error';
+            sourceNode.lastChild.textContent = 'Gagal memuat data';
+        }
+    };
+    refresh();
+    setInterval(refresh, 15000);
+})();
