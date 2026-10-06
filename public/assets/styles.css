@@ -705,3 +705,13 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .channel-check input:checked + span { background: #0f9d8a; color: #fff; }
 .condition-check { padding: 6px 4px; }
 .condition-check small { color: #64748b; margin-left: 6px; }
+
+.member-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.member-list li { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; background: #f6f9fb; }
+.member-list li.is-off { opacity: .6; }
+.member-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #d9efe9; color: #0f766e; font-weight: 800; }
+.member-info { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; }
+.member-info small { color: #64748b; font-size: 12px; }
+.warn-chip { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; }
+.member-edit { flex: 1 1 100%; }
+.member-edit > summary { cursor: pointer; color: #0f766e; font-size: 12px; font-weight: 700; }

@@ -102,3 +102,7 @@ Tab Peta menampilkan titik status sensor pada penanda (hijau sehat, merah terlam
 - Eskalasi bila belum diakui: langkah berurutan (menit sejak peringatan, penerima, kanal). Langkah harus lebih lama dari langkah sebelumnya dan tidak lebih cepat dari batas pengakuan.
 - Semua perubahan wajib beralasan, dibatasi cakupan wilayah, dan dicatat di audit. Pengiriman notifikasi nyata dan evaluasi otomatis menyusul (FR-07/08, modul Penerima notifikasi).
 - Seed demo: `sqlite3 storage/db_ews.sqlite < database/rules_demo.sql` (setelah `thresholds_demo.sql`).
+
+## Penerima notifikasi (FR-06)
+
+Menu `?page=dashboard&section=recipients`: kelompok penerima per wilayah/bahaya (kanal, jam aktif) beserta anggota. Kontak disamarkan di daftar dan tidak masuk audit; kelompok yang dipakai aturan tidak bisa dihapus (nonaktifkan). Nama kelompok disarankan di form aturan lewat datalist. Seed: `sqlite3 storage/db_ews.sqlite < database/recipients_demo.sql`.

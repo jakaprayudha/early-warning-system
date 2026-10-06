@@ -280,6 +280,36 @@ function db(): PDO
     );
     $connection->exec('CREATE INDEX IF NOT EXISTS alert_rule_escalations_rule ON alert_rule_escalations(rule_id)');
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS recipient_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            description TEXT NOT NULL DEFAULT "",
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+            hazard_code TEXT COLLATE NOCASE REFERENCES hazard_types(code) ON UPDATE CASCADE ON DELETE SET NULL,
+            channels TEXT NOT NULL,
+            active_from TEXT,
+            active_until TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS recipient_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES recipient_groups(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            position TEXT NOT NULL DEFAULT "",
+            email TEXT NOT NULL DEFAULT "",
+            phone TEXT NOT NULL DEFAULT "",
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec('CREATE INDEX IF NOT EXISTS recipient_members_group ON recipient_members(group_id)');
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token_hash TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

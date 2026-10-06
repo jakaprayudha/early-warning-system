@@ -21,7 +21,7 @@ function render_rule_fields(?array $rule, array $hazards, array $labels, array $
     <label>Wilayah<select name="region_id" required><option value="">Pilih wilayah</option><?php render_region_options($labels, $rule === null ? null : (int) $rule['region_id']); ?></select></label>
     <label>Tingkat yang dihasilkan<?php render_select('severity', alert_severities(), $value('severity', 'watch')); ?></label>
     <label>Kombinasi indikator<?php render_select('combine_mode', ['all' => 'Semua indikator terpenuhi (DAN)', 'any' => 'Salah satu terpenuhi (ATAU)'], $value('combine_mode', 'all')); ?></label>
-    <label>Kelompok penerima awal<input name="recipient_group" maxlength="100" value="<?= e($value('recipient_group')) ?>" placeholder="contoh: Operator BPBD" required></label>
+    <label>Kelompok penerima awal<input name="recipient_group" list="recipient-group-names" maxlength="100" value="<?= e($value('recipient_group')) ?>" placeholder="contoh: Operator BPBD" required></label>
     <label>Jeda pengulangan (menit, 0 = tanpa)<input name="repeat_interval_minutes" type="number" min="0" max="10080" value="<?= e($value('repeat_interval_minutes', '30')) ?>"></label>
     <label>Batas pengakuan (menit)<input name="ack_timeout_minutes" type="number" min="1" max="10080" value="<?= e($value('ack_timeout_minutes', '30')) ?>" required></label>
     <label>Jam aktif mulai<input name="active_from" type="time" value="<?= e($value('active_from')) ?>"></label>
@@ -61,6 +61,7 @@ function render_rules_page(array $user, ?string $message, ?string $error): void
     <div class="hazard-admin">
         <p class="dashboard-message">Aturan menggabungkan indikator (ambang yang sudah disetujui) menjadi tingkat peringatan, lalu menentukan penerima, kanal, jeda pengulangan, dan langkah eskalasi bila peringatan belum diakui.</p>
         <?php render_notices($message, $error); ?>
+        <datalist id="recipient-group-names"><?php foreach (recipient_group_names($user) as $groupName): ?><option value="<?= e($groupName) ?>"><?php endforeach; ?></datalist>
         <div class="sensor-summary threshold-summary">
             <div class="sensor-summary-item approval-tile"><strong><?= $total ?></strong><span>Aturan</span></div>
             <div class="sensor-summary-item approval-tile approval-tile-approved"><strong><?= $active ?></strong><span>Aktif</span></div>
@@ -144,7 +145,7 @@ function render_rules_page(array $user, ?string $message, ?string $error): void
                                 <input type="hidden" name="action" value="add_step">
                                 <input type="hidden" name="rule_id" value="<?= (int) $rule['id'] ?>">
                                 <label>Setelah (menit sejak peringatan)<input name="after_minutes" type="number" min="1" max="10080" required></label>
-                                <label>Penerima<input name="recipient_group" maxlength="100" required placeholder="contoh: Kepala Pelaksana"></label>
+                                <label>Penerima<input name="recipient_group" list="recipient-group-names" maxlength="100" required placeholder="contoh: Kepala Pelaksana"></label>
                                 <fieldset class="rule-fieldset hazard-description"><legend>Kanal</legend><?php render_channel_checks(['dashboard']); ?></fieldset>
                                 <label class="hazard-reason">Alasan perubahan<input name="reason" maxlength="500" required></label>
                                 <button class="save-button" type="submit">Tambah langkah</button>

@@ -11,6 +11,8 @@ require dirname(__DIR__) . '/app/thresholds.php';
 require dirname(__DIR__) . '/app/thresholds_views.php';
 require dirname(__DIR__) . '/app/rules.php';
 require dirname(__DIR__) . '/app/rules_views.php';
+require dirname(__DIR__) . '/app/recipients.php';
+require dirname(__DIR__) . '/app/recipients_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -431,6 +433,56 @@ if ($page === 'dashboard'
         flash('error', 'Data tidak dapat disimpan karena masih terkait data lain.');
     }
     redirect_to('/?page=dashboard&section=rules');
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'recipients'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'recipients');
+        exit;
+    }
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan wajib diisi (3–500 karakter).');
+        }
+        if (in_array($action, ['create_group', 'update_group'], true)) {
+            $data = parse_group_input($_POST, $action === 'create_group');
+            if ($action === 'update_group' && $data['id'] < 1) {
+                throw new InvalidArgumentException('Kelompok tidak valid.');
+            }
+            save_recipient_group($user, $action, $data, $reason);
+            flash('message', $action === 'create_group' ? 'Kelompok penerima ditambahkan.' : 'Kelompok penerima diperbarui.');
+        } elseif ($action === 'delete_group') {
+            delete_recipient_group($user, (int) filter_var(post_value('group_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Kelompok dihapus.');
+        } elseif (in_array($action, ['add_member', 'update_member'], true)) {
+            save_recipient_member($user, $action, parse_member_input($_POST), $reason);
+            flash('message', $action === 'add_member' ? 'Anggota ditambahkan.' : 'Anggota diperbarui.');
+        } elseif ($action === 'delete_member') {
+            delete_recipient_member($user, (int) filter_var(post_value('member_id'), FILTER_VALIDATE_INT), $reason);
+            flash('message', 'Anggota dihapus.');
+        } else {
+            throw new InvalidArgumentException('Tindakan tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'Nama kelompok sudah digunakan atau data masih terkait.');
+    }
+    redirect_to('/?page=dashboard&section=recipients');
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {
