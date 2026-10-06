@@ -62,7 +62,7 @@ function render_integrations_page(array $user, ?string $message, ?string $error,
                 <summary><span>+ Buat token</span></summary>
                 <form class="hazard-form" method="post" action="<?= $action ?>">
                     <input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="action" value="create_token">
-                    <label>Nama token<input name="name" maxlength="100" required placeholder="contoh: Gateway Citarum"></label>
+                    <label>Nama token<input name="name" maxlength="100" required placeholder="contoh: Gateway Sungai Belawan"></label>
                     <label>Cakupan wilayah<select name="region_id" required><option value="">Pilih wilayah</option><?php render_region_options($labels, null); ?></select></label>
                     <label class="hazard-reason">Alasan<input name="reason" maxlength="500" required></label>
                     <button class="save-button" type="submit">Buat token</button>

@@ -128,3 +128,7 @@ Menu `?page=admin`: ringkasan akun, pencarian/filter (nama, email, peran, status
 ## Audit aktivitas
 
 Menu `?page=dashboard&section=audit` (izin `manage_access`): tampilan baca-saja yang menggabungkan audit konfigurasi/akses, jenis bahaya, dan penanganan kejadian. Filter: kata kunci, sumber, pelaku, aksi, dan periode; paginasi 25 catatan; detail JSON bisa dibuka; ekspor CSV (maks. 10.000 baris, UTC) yang juga dicatat di audit. Tidak ada fitur ubah/hapus.
+
+## Data demo utama: Deli Serdang
+
+`database/deli_serdang_demo.sql` (SQLite) menggantikan data demo Jawa Barat/DKI: Sumatera Utara → Kabupaten Deli Serdang → 11 kecamatan, 14 titik rawan (tornado, sungai, cuaca, pantai) dengan koordinat, 1 sensor per lokasi, serta kejadian, ambang, dan aturan yang diselaraskan. Jalankan: `sqlite3 storage/db_ews.sqlite < database/deli_serdang_demo.sql`.

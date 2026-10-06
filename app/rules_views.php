@@ -16,7 +16,7 @@ function render_rule_fields(?array $rule, array $hazards, array $labels, array $
     $value = static fn(string $key, string $default = ''): string => $rule === null ? $default : (string) ($rule[$key] ?? $default);
     $selectedConditions = $rule === null ? [] : array_map(static fn(array $c): int => (int) $c['id'], $rule['conditions']);
     ?>
-    <label class="hazard-description">Nama aturan<input name="name" maxlength="120" value="<?= e($value('name')) ?>" placeholder="contoh: Banjir Bekasi - Siaga" required></label>
+    <label class="hazard-description">Nama aturan<input name="name" maxlength="120" value="<?= e($value('name')) ?>" placeholder="contoh: Banjir Deli Serdang - Siaga" required></label>
     <label>Jenis bahaya<?php render_select('hazard_code', $hazards, strtolower($value('hazard_code'))); ?></label>
     <label>Wilayah<select name="region_id" required><option value="">Pilih wilayah</option><?php render_region_options($labels, $rule === null ? null : (int) $rule['region_id']); ?></select></label>
     <label>Tingkat yang dihasilkan<?php render_select('severity', alert_severities(), $value('severity', 'watch')); ?></label>
