@@ -460,20 +460,13 @@ function render_dashboard(array $user, string $section = 'overview'): void
     render_app_shell_end();
 }
 
-function render_dashboard_overview(array $user): void
+function build_monitoring_map_points(array $user, array $sensors): array
 {
-    $regions = user_regions($user);
-    $regionCount = count($regions);
-    $openAlertCount = count_alert_events($user, 'open');
-    $activeEvents = array_slice(list_alert_events($user, [], true), 0, 3);
     $healthLabels = sensor_health_labels();
-    $sensors = list_sensors($user);
     $sensorsByLocation = [];
     $healthCounts = array_fill_keys(array_keys($healthLabels), 0);
-    $lastDataAt = 0;
     foreach ($sensors as $sensor) {
         $healthCounts[$sensor['health']]++;
-        $lastDataAt = max($lastDataAt, (int) $sensor['last_data_at']);
         $sensorsByLocation[(int) $sensor['location_id']][] = [
             'name' => $sensor['name'],
             'parameter' => $sensor['parameter'],
@@ -482,7 +475,6 @@ function render_dashboard_overview(array $user): void
             'last' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at']),
         ];
     }
-    $monitorable = $healthCounts['healthy'] + $healthCounts['delayed'] + $healthCounts['unknown'];
     $rank = ['delayed' => 4, 'unknown' => 3, 'maintenance' => 2, 'healthy' => 1, 'inactive' => 0];
     $regionLabels = region_path_labels(list_managed_regions($user));
     $hazardNames = alert_hazards();
@@ -515,6 +507,27 @@ function render_dashboard_overview(array $user): void
             'datum' => $location['vertical_datum'],
             'hazards' => array_map(static fn($code) => $hazardNames[$code] ?? (string) $code, $location['hazards']),
         ];
+    }
+
+    return ['points' => $points, 'locations' => $locations, 'active' => $activeLocationCount, 'healthCounts' => $healthCounts];
+}
+
+function render_dashboard_overview(array $user): void
+{
+    $regions = user_regions($user);
+    $regionCount = count($regions);
+    $openAlertCount = count_alert_events($user, 'open');
+    $activeEvents = array_slice(list_alert_events($user, [], true), 0, 3);
+    $healthLabels = sensor_health_labels();
+    $sensors = list_sensors($user);
+    $mapData = build_monitoring_map_points($user, $sensors);
+    $points = $mapData['points'];
+    $locations = $mapData['locations'];
+    $activeLocationCount = $mapData['active'];
+    $healthCounts = $mapData['healthCounts'];
+    $lastDataAt = 0;
+    foreach ($sensors as $sensor) {
+        $lastDataAt = max($lastDataAt, (int) $sensor['last_data_at']);
     }
     $styles = location_map_styles();
     $userCount = null;
@@ -583,6 +596,7 @@ function render_dashboard_overview(array $user): void
                         <button type="button" data-map-zoom="1" aria-label="Perbesar">+</button>
                         <button type="button" data-map-zoom="-1" aria-label="Perkecil">−</button>
                         <button type="button" data-map-fit aria-label="Tampilkan semua lokasi">⤢</button>
+                        <a class="map-control-link" href="/?page=map" target="_blank" rel="noopener" aria-label="Buka peta penuh di tab baru" title="Buka peta penuh">↗</a>
                     </div>
                     <div class="map-attribution">© OpenStreetMap contributors</div>
                     <div class="map-coords" data-map-coords>Arahkan kursor ke peta</div>
@@ -1361,5 +1375,40 @@ function render_admin_page(
         <p class="scope-hint">Perubahan peran, status, dan cakupan wilayah dicatat pada audit akses.</p>
     </div>
     <?php render_app_shell_end(); ?>
+    <?php
+}
+
+
+function render_full_map_page(array $user): void
+{
+    $healthLabels = sensor_health_labels();
+    $points = build_monitoring_map_points($user, list_sensors($user))['points'];
+    $styles = location_map_styles();
+    sensor_page_head('Peta pemantauan');
+    ?>
+    <body class="map-full-body">
+    <header class="map-full-bar">
+        <a href="/?page=dashboard">← Dashboard</a>
+        <strong>Peta pemantauan</strong>
+        <span><?= count($points) ?> lokasi</span>
+    </header>
+    <div class="location-map full-map" data-location-map data-points="<?= e(json_encode($points, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>" data-styles="<?= e(json_encode($styles, JSON_THROW_ON_ERROR)) ?>" role="application" aria-label="Peta lokasi pantau" tabindex="0">
+        <div class="map-tiles" data-map-tiles></div>
+        <div class="map-markers" data-map-markers></div>
+        <div class="map-controls">
+            <button type="button" data-map-zoom="1" aria-label="Perbesar">+</button>
+            <button type="button" data-map-zoom="-1" aria-label="Perkecil">−</button>
+            <button type="button" data-map-fit aria-label="Tampilkan semua lokasi">⤢</button>
+        </div>
+        <div class="map-attribution">© OpenStreetMap contributors</div>
+        <div class="map-coords" data-map-coords>Arahkan kursor ke peta</div>
+    </div>
+    <footer class="map-full-legend">
+        <?php foreach ($styles as $key => $style): ?><span><i class="map-pin-sample" data-map-legend="<?= e($key) ?>"></i><?= e($style['label']) ?></span><?php endforeach; ?>
+        <strong>Status sensor:</strong>
+        <?php foreach ($healthLabels + ['none' => 'Tanpa sensor'] as $key => $label): ?><span><i class="health-dot health-<?= e($key) ?>"></i><?= e($label) ?></span><?php endforeach; ?>
+    </footer>
+    </body>
+    </html>
     <?php
 }

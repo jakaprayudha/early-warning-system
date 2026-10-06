@@ -58,6 +58,7 @@ $allowedPages = [
     'sensor-detail',
     'sensor-label',
     'sensor-export',
+    'map',
     'api-river-feed',
     'river-monitor',
     'api-tide-feed',
@@ -232,6 +233,14 @@ if ($page === 'sensor-detail' || $page === 'sensor-label' || $page === 'sensor-e
         handle_sensor_export($sensor);
     }
     render_sensor_detail_page($sensor, get_sensor_specs([(int) $sensor['id']])[(int) $sensor['id']] ?? null, $canManage);
+    exit;
+}
+if ($page === 'map') {
+    if ($user === null || !user_has_permission($user, 'dashboard')) {
+        $_SESSION['after_login'] = '/?page=dashboard';
+        redirect_to('/?page=login');
+    }
+    render_full_map_page($user);
     exit;
 }
 if ($page === 'ews') {
