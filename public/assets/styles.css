@@ -1000,3 +1000,14 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .map-sensor-info:hover b{text-decoration:underline}
 .map-sensor-value{flex:none;font-size:14px;color:#1f5f3f;white-space:nowrap}
 .map-popup-live{margin:6px 0 0;font-size:11px;color:#5b6b60}
+
+.location-card-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
+.location-card-actions .status-badge{margin:0}
+.location-card-actions .map-link{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:1px solid #cfd9d1;border-radius:999px;background:#fff;color:#1f5f3f;font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap}
+.location-card-actions .map-link:hover{background:#eef6f1}
+@media(max-width:700px){.location-card-actions{flex-direction:column;align-items:flex-end}}
+.location-card-actions .status-badge{display:inline-flex;align-items:center;height:28px;box-sizing:border-box}
+.hazard-type-heading .location-card-actions{justify-self:end;align-self:start;margin-left:auto}
+.location-card-actions .map-link{font-family:inherit;font-size:.78rem}
+.location-card-actions .map-link,.location-card-actions .status-badge{height:26px;line-height:1}
+.hazard-type-heading > .location-card-actions{flex:none;align-self:center}

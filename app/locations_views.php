@@ -217,7 +217,10 @@ function render_locations_page(array $user, ?string $message, ?string $error): v
                                 <p class="location-coords"><?= e(number_format((float) $location['latitude'], 5, '.', '')) ?>, <?= e(number_format((float) $location['longitude'], 5, '.', '')) ?><?= $location['elevation_m'] === null ? '' : ' · elevasi ' . e((string) $location['elevation_m']) . ' m' ?><?= $location['vertical_datum'] !== '' ? ' (' . e($location['vertical_datum']) . ')' : '' ?></p>
                                 <p class="location-hazard-tags"><?php foreach ($location['hazards'] as $code): ?><span><?= e($hazards[$code] ?? (string) $code) ?></span><?php endforeach; ?></p>
                             </div>
-                            <span class="status-badge <?= (int) $location['is_active'] === 1 ? 'status-active' : 'status-suspended' ?>"><?= (int) $location['is_active'] === 1 ? 'Aktif' : 'Nonaktif' ?></span>
+                            <div class="location-card-actions">
+                                <a class="map-link" href="https://www.google.com/maps?q=<?= e(number_format((float) $location['latitude'], 6, '.', '') . ',' . number_format((float) $location['longitude'], 6, '.', '')) ?>" target="_blank" rel="noopener noreferrer" title="Buka di Google Maps">📍 Google Maps</a>
+                                <span class="status-badge <?= (int) $location['is_active'] === 1 ? 'status-active' : 'status-suspended' ?>"><?= (int) $location['is_active'] === 1 ? 'Aktif' : 'Nonaktif' ?></span>
+                            </div>
                         </div>
                         <details class="edit-details">
                             <summary>Ubah lokasi</summary>
