@@ -874,3 +874,34 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .river-fill.river-warning { background: #d1493f; }
 .river-thresholds { font-size: 10px !important; font-weight: 600 !important; line-height: 1.5; }
 .bar-w-0 { width: 0; }
+
+.weather-detail-link { display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 700; color: #17806b; text-decoration: none; }
+.weather-detail-link:hover { text-decoration: underline; }
+.monitor-body { margin: 0; background: #eef3f1; color: #1c2b33; min-height: 100vh; }
+.monitor-page { max-width: 1400px; margin: 0 auto; padding: 24px; display: grid; gap: 18px; }
+.monitor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.monitor-head h1 { margin: 4px 0; font-size: 30px; }
+.monitor-head p { margin: 0; color: #75858a; font-size: 13px; }
+.monitor-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.monitor-now { display: grid; grid-template-columns: 1.4fr repeat(5, 1fr); gap: 12px; }
+.monitor-now article { background: #fff; border-radius: 14px; padding: 14px 16px; display: grid; gap: 6px; box-shadow: 0 1px 2px rgba(20, 40, 40, .06); }
+.monitor-now article > span { font-size: 12px; color: #75858a; }
+.monitor-now article strong { font-size: 24px; }
+.monitor-now article small { font-size: 12px; font-weight: 500; color: #75858a; }
+.monitor-now .monitor-main strong { font-size: 40px; }
+.monitor-now .weather-level { justify-self: start; }
+.monitor-charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.monitor-chart { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20, 40, 40, .06); }
+.monitor-chart.wide { grid-column: 1 / -1; }
+.monitor-chart header { display: flex; justify-content: space-between; align-items: baseline; }
+.monitor-chart h2 { margin: 0; font-size: 14px; }
+.monitor-chart header span { font-size: 11px; color: #75858a; }
+.monitor-chart canvas { width: 100%; height: 200px; display: block; margin-top: 8px; }
+.monitor-chart.wide canvas { height: 260px; }
+.monitor-table { padding: 16px; overflow-x: auto; }
+.monitor-table h2 { margin: 0 0 10px; font-size: 14px; }
+.monitor-table table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.monitor-table th, .monitor-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #edf1ef; }
+.monitor-table th { color: #75858a; font-weight: 600; font-size: 11px; }
+@media (max-width: 900px) { .monitor-now { grid-template-columns: repeat(2, 1fr); } .monitor-charts { grid-template-columns: 1fr; } }
+.monitor-now article strong > span { font-size: inherit; color: inherit; }

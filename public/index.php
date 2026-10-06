@@ -49,6 +49,7 @@ $allowedPages = [
     'history',
     'api-ingest',
     'api-weather-feed',
+    'weather-monitor',
     'api-river-feed',
     'api-tide-feed',
     'api-tornado-feed',
@@ -135,6 +136,20 @@ if ($page === 'api-river-feed') {
         exit('{"error":"unauthorized"}');
     }
     handle_river_feed($user);
+}
+if ($page === 'weather-monitor') {
+    if ($user === null) {
+        redirect_to('/?page=login');
+    }
+    $station = is_string($_GET['code'] ?? null) && (user_has_permission($user, 'dashboard') || $user['role'] === 'system_admin')
+        ? weather_find_station($user, $_GET['code']) : null;
+    if ($station === null) {
+        http_response_code(404);
+        render_access_denied();
+        exit;
+    }
+    render_weather_monitor_page($station);
+    exit;
 }
 if ($page === 'api-weather-feed') {
     if ($user === null) {

@@ -162,3 +162,7 @@ Menu **Pemantauan → Monitoring tornado** menampilkan titik rawan tornado (baha
 - Endpoint JSON: `GET /?page=api-tornado-feed` (wajib login, dibatasi cakupan wilayah); halaman memperbarui diri tiap 15 detik.
 - Tanpa konfigurasi, data berasal dari simulasi. Isi `APP_TORNADO_FEED_URL` dengan URL http(s) API sensor asli; bila gagal, kembali ke simulasi.
 - Skema JSON: `{"generated_at": "...", "stations": [{"code": "DS-TOR-PAYA-BAKUNG", "observed_at": "...", "wind_kmh": 52.5, "change_1h_kmh": -11.3, "gust_kmh": 62.9, "pressure_hpa": 1003.6}]}`
+
+### Halaman monitoring penuh (cuaca)
+
+Setiap kartu stasiun di Monitoring cuaca punya tautan **Buka monitoring penuh** ke `/?page=weather-monitor&code=<kode>`: halaman layar penuh tanpa sidebar/header dengan nilai realtime, grafik (hujan, suhu, kelembapan, angin, tekanan) dan tabel data terbaru, diperbarui tiap 5 detik. Riwayat awal 3 jam berasal dari simulasi; bila `APP_WEATHER_FEED_URL` aktif, grafik terisi dari polling. Endpoint: `/?page=api-weather-feed&code=<kode>&history=1`.

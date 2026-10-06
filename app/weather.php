@@ -49,29 +49,47 @@ function weather_stations(array $user): array
     return $stations;
 }
 
+function weather_dummy_row(string $code, int $at): array
+{
+    $seed = crc32($code) % 1000;
+    $wave = sin($at / 420 + $seed) + 0.5 * sin($at / 130 + $seed * 2);
+    $rain = max(0.0, ($wave - 0.2) * 14 + ($seed % 7));
+    $rain = $seed % 4 === 0 ? max(0.0, $rain - 6) : $rain;
+
+    return [
+        'code' => $code,
+        'observed_at' => gmdate('c', $at - $seed % 40),
+        'rain_mm_h' => round($rain, 1),
+        'temperature_c' => round(28 + 3 * sin($at / 900 + $seed) - min($rain, 10) * 0.2, 1),
+        'humidity_pct' => (int) round(min(100, 72 + min($rain, 20) * 1.2 + 6 * sin($at / 600 + $seed))),
+        'wind_kmh' => round(max(0, 11 + 8 * sin($at / 300 + $seed) + $rain * 0.4), 1),
+        'wind_deg' => (int) (($seed * 37 + intdiv($at, 60) * 3) % 360),
+        'pressure_hpa' => round(1009 + 3 * sin($at / 1800 + $seed) - min($rain, 15) * 0.15, 1),
+    ];
+}
+
 // Pembangkit data simulasi; menggantikan respons JSON sensor sampai API asli tersedia.
 function weather_dummy_feed(array $codes): array
 {
     $now = time();
-    $stations = [];
-    foreach ($codes as $code) {
-        $seed = crc32((string) $code) % 1000;
-        $wave = sin($now / 420 + $seed) + 0.5 * sin($now / 130 + $seed * 2);
-        $rain = max(0.0, ($wave - 0.2) * 14 + ($seed % 7));
-        $rain = $seed % 4 === 0 ? max(0.0, $rain - 6) : $rain;
-        $stations[] = [
-            'code' => (string) $code,
-            'observed_at' => gmdate('c', $now - $seed % 40),
-            'rain_mm_h' => round($rain, 1),
-            'temperature_c' => round(28 + 3 * sin($now / 900 + $seed) - min($rain, 10) * 0.2, 1),
-            'humidity_pct' => (int) round(min(100, 72 + min($rain, 20) * 1.2 + 6 * sin($now / 600 + $seed))),
-            'wind_kmh' => round(max(0, 11 + 8 * sin($now / 300 + $seed) + $rain * 0.4), 1),
-            'wind_deg' => (int) (($seed * 37 + intdiv($now, 60) * 3) % 360),
-            'pressure_hpa' => round(1009 + 3 * sin($now / 1800 + $seed) - min($rain, 15) * 0.15, 1),
-        ];
+
+    return [
+        'source' => 'dummy',
+        'generated_at' => gmdate('c', $now),
+        'stations' => array_map(static fn(mixed $code): array => weather_dummy_row((string) $code, $now), $codes),
+    ];
+}
+
+// Riwayat simulasi 3 jam terakhir (interval 2 menit) untuk grafik halaman detail.
+function weather_dummy_history(string $code): array
+{
+    $now = time();
+    $rows = [];
+    for ($i = 90; $i >= 1; $i--) {
+        $rows[] = weather_dummy_row($code, $now - $i * 120);
     }
 
-    return ['source' => 'dummy', 'generated_at' => gmdate('c', $now), 'stations' => $stations];
+    return $rows;
 }
 
 // Bila APP_WEATHER_FEED_URL diatur, JSON dibaca dari sumber asli (skema sama); gagal => kembali ke simulasi.
@@ -99,14 +117,37 @@ function weather_fetch_feed(array $codes): array
 
 function handle_weather_feed(array $user): never
 {
+    header('Content-Type: application/json; charset=utf-8');
     if (!user_has_permission($user, 'dashboard') && $user['role'] !== 'system_admin') {
         http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
         echo '{"error":"forbidden"}';
         exit;
     }
     $codes = array_map(static fn(array $s): string => (string) $s['code'], weather_stations($user));
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(weather_fetch_feed($codes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    $only = $_GET['code'] ?? null;
+    if (is_string($only)) {
+        if (!in_array($only, $codes, true)) {
+            http_response_code(404);
+            echo '{"error":"not_found"}';
+            exit;
+        }
+        $codes = [$only];
+    }
+    $feed = weather_fetch_feed($codes);
+    if (is_string($only) && ($_GET['history'] ?? '') === '1') {
+        $feed['history'] = $feed['source'] === 'dummy' ? weather_dummy_history($only) : [];
+    }
+    echo json_encode($feed, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+function weather_find_station(array $user, string $code): ?array
+{
+    foreach (weather_stations($user) as $station) {
+        if ($station['code'] === $code) {
+            return $station;
+        }
+    }
+
+    return null;
 }
