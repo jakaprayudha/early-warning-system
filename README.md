@@ -84,3 +84,14 @@ sqlite3 storage/db_ews.sqlite < database/locations_demo.sql
 ```
 
 Tab **Peta** menampilkan lokasi pada peta interaktif (seret, scroll/tombol untuk zoom, tombol ⤢ untuk menampilkan semua lokasi) dengan ikon dan warna berbeda per tipe alat/lokasi, popup detail, dan daftar lokasi di samping. Ubin peta dimuat dari `tile.openstreetmap.org` (diizinkan pada CSP `img-src`); tanpa internet, peta tetap menampilkan penanda pada latar polos.
+
+## Parameter dan Ambang (FR-05)
+
+- `?page=dashboard&section=parameters`: CRUD parameter terukur (kode tetap, bahaya, satuan, agregasi). Parameter yang sudah punya ambang tidak dapat dihapus, nonaktifkan saja.
+- `?page=dashboard&section=thresholds`: ambang per parameter/wilayah/lokasi dengan operator, histeresis (nilai reset), persistensi, prioritas, masa berlaku, dan versi.
+- Alur: draf → diajukan → disetujui/ditolak. **Pembuat tidak dapat menyetujui ambangnya sendiri** (butuh dua akun `manage_master_data`; seed memuat `admin@ews.local` dan `admin@example.test`). Ambang yang disetujui tidak diubah langsung: buat versi baru, dan saat versi baru disetujui versi lama menjadi "Digantikan".
+- Seed demo: `sqlite3 storage/db_ews.sqlite < database/thresholds_demo.sql` (muat satu halaman aplikasi dulu agar tabel terbentuk).
+
+## Status sensor di peta
+
+Tab Peta menampilkan titik status sensor pada penanda (hijau sehat, merah terlambat, kuning pemeliharaan, biru belum ada data, abu tanpa sensor/nonaktif), daftar sensor di popup, dan filter "Status sensor".

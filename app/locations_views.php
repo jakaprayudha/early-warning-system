@@ -269,11 +269,38 @@ function render_locations_map(array $user, array $labels, array $hazards): void
         'region_id' => is_string($_GET['region_id'] ?? null) ? (int) $_GET['region_id'] : 0,
         'hazard' => is_string($_GET['hazard'] ?? null) ? $_GET['hazard'] : '',
         'status' => is_string($_GET['status'] ?? null) ? $_GET['status'] : '',
+        'sensor' => is_string($_GET['sensor'] ?? null) ? $_GET['sensor'] : '',
     ];
+    $healthLabels = sensor_health_labels();
+    $sensorsByLocation = [];
+    foreach (list_sensors($user) as $sensor) {
+        $sensorsByLocation[(int) $sensor['location_id']][] = [
+            'name' => $sensor['name'],
+            'parameter' => $sensor['parameter'],
+            'health' => $sensor['health'],
+            'label' => $healthLabels[$sensor['health']] ?? $sensor['health'],
+            'last' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at']),
+        ];
+    }
+    $rank = ['delayed' => 4, 'unknown' => 3, 'maintenance' => 2, 'healthy' => 1, 'inactive' => 0];
     $locations = list_monitoring_locations($user, $filters);
     $points = [];
     foreach ($locations as $location) {
+        $locationSensors = $sensorsByLocation[(int) $location['id']] ?? [];
+        $worst = 'none';
+        $best = -1;
+        foreach ($locationSensors as $item) {
+            if (($rank[$item['health']] ?? 0) > $best) {
+                $best = $rank[$item['health']] ?? 0;
+                $worst = $item['health'];
+            }
+        }
+        if ($filters['sensor'] !== '' && $filters['sensor'] !== $worst) {
+            continue;
+        }
         $points[] = [
+            'sensorHealth' => $worst,
+            'sensors' => $locationSensors,
             'id' => (int) $location['id'],
             'code' => $location['code'],
             'name' => $location['name'],
@@ -298,6 +325,7 @@ function render_locations_map(array $user, array $labels, array $hazards): void
             <select name="region_id" aria-label="Wilayah"><option value="">Semua wilayah</option><?php render_region_options($labels, $filters['region_id'] ?: null); ?></select>
             <select name="hazard" aria-label="Jenis bahaya"><option value="">Semua bahaya</option><?php foreach ($hazards as $code => $name): ?><option value="<?= e((string) $code) ?>" <?= $filters['hazard'] === $code ? 'selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?></select>
             <select name="status" aria-label="Status"><option value="">Semua status</option><option value="active" <?= $filters['status'] === 'active' ? 'selected' : '' ?>>Aktif</option><option value="inactive" <?= $filters['status'] === 'inactive' ? 'selected' : '' ?>>Nonaktif</option></select>
+            <select name="sensor" aria-label="Status sensor"><option value="">Semua status sensor</option><?php foreach ($healthLabels + ['none' => 'Tanpa sensor'] as $key => $label): ?><option value="<?= e($key) ?>" <?= $filters['sensor'] === $key ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
             <button class="save-button" type="submit">Terapkan</button>
         </form>
         <div class="location-map-layout">
@@ -319,6 +347,12 @@ function render_locations_map(array $user, array $labels, array $hazards): void
                     <?php endforeach; ?>
                     <span><i class="map-pin-sample inactive"></i>Nonaktif</span>
                 </div>
+                <div class="map-legend map-health-legend" aria-label="Legenda status sensor">
+                    <strong>Status sensor:</strong>
+                    <?php foreach ($healthLabels + ['none' => 'Tanpa sensor'] as $key => $label): ?>
+                        <span><i class="health-dot health-<?= e($key) ?>"></i><?= e($label) ?></span>
+                    <?php endforeach; ?>
+                </div>
             </div>
             <aside class="panel location-map-list" aria-label="Daftar lokasi">
                 <?php if ($points === []): ?>
@@ -329,6 +363,7 @@ function render_locations_map(array $user, array $labels, array $hazards): void
                             <li><button type="button" data-map-focus="<?= (int) $point['id'] ?>">
                                 <span class="map-list-icon" data-map-legend="<?= e($point['type']) ?>"></span>
                                 <span><strong><?= e($point['name']) ?></strong><small><?= e(number_format($point['lat'], 5, '.', '')) ?>, <?= e(number_format($point['lng'], 5, '.', '')) ?></small></span>
+                                <i class="health-dot health-<?= e($point['sensorHealth']) ?>" title="<?= e($healthLabels[$point['sensorHealth']] ?? 'Tanpa sensor') ?>"></i>
                             </button></li>
                         <?php endforeach; ?>
                     </ul>

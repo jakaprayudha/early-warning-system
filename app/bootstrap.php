@@ -195,6 +195,52 @@ function db(): PDO
     );
     $connection->exec('CREATE INDEX IF NOT EXISTS sensors_location ON sensors(location_id)');
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS parameters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            name TEXT NOT NULL,
+            hazard_code TEXT NOT NULL COLLATE NOCASE REFERENCES hazard_types(code)
+                ON UPDATE CASCADE ON DELETE RESTRICT,
+            unit TEXT NOT NULL DEFAULT "",
+            aggregation TEXT NOT NULL DEFAULT "instant"
+                CHECK (aggregation IN ("instant", "avg", "sum", "max", "min", "rate")),
+            aggregation_minutes INTEGER NOT NULL DEFAULT 0 CHECK (aggregation_minutes BETWEEN 0 AND 10080),
+            description TEXT NOT NULL DEFAULT "",
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS thresholds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parameter_id INTEGER NOT NULL REFERENCES parameters(id) ON DELETE RESTRICT,
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE RESTRICT,
+            location_id INTEGER REFERENCES monitoring_locations(id) ON DELETE RESTRICT,
+            severity TEXT NOT NULL CHECK (severity IN ("watch", "alert", "warning")),
+            operator TEXT NOT NULL CHECK (operator IN (">", ">=", "<", "<=")),
+            value REAL NOT NULL,
+            reset_value REAL,
+            persistence_minutes INTEGER NOT NULL DEFAULT 0 CHECK (persistence_minutes BETWEEN 0 AND 10080),
+            priority INTEGER NOT NULL DEFAULT 50 CHECK (priority BETWEEN 1 AND 100),
+            valid_from TEXT NOT NULL,
+            valid_until TEXT,
+            version INTEGER NOT NULL DEFAULT 1,
+            supersedes_id INTEGER REFERENCES thresholds(id) ON DELETE SET NULL,
+            approval_status TEXT NOT NULL DEFAULT "draft"
+                CHECK (approval_status IN ("draft", "pending", "approved", "rejected", "superseded", "retired")),
+            notes TEXT NOT NULL DEFAULT "",
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            decided_at INTEGER,
+            decision_reason TEXT NOT NULL DEFAULT "",
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec('CREATE INDEX IF NOT EXISTS thresholds_parameter ON thresholds(parameter_id)');
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token_hash TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

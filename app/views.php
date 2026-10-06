@@ -398,6 +398,10 @@ function render_dashboard(array $user, string $section = 'overview'): void
         );
     } elseif ($section === 'sensors') {
         render_sensors_page($user, flash('message'), flash('error'));
+    } elseif ($section === 'parameters') {
+        render_parameters_page($user, flash('message'), flash('error'));
+    } elseif ($section === 'thresholds') {
+        render_thresholds_page($user, flash('message'), flash('error'));
     } elseif ($section === 'locations') {
         render_locations_page($user, flash('message'), flash('error'));
     } else {

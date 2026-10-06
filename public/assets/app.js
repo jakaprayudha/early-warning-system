@@ -110,6 +110,9 @@ if (locationMap) {
         button.setAttribute('aria-label', point.name);
         button.style.background = (styles[point.type] || styles.other).color;
         button.appendChild(buildIcon(point.type));
+        const dot = document.createElement('i');
+        dot.className = 'health-dot health-' + point.sensorHealth;
+        button.appendChild(dot);
         button.addEventListener('click', (event) => {
             event.stopPropagation();
             select(point.id);
@@ -164,6 +167,20 @@ if (locationMap) {
             addLine(popup, 'Elevasi', point.elevation + ' m' + (point.datum ? ' (' + point.datum + ')' : ''));
         }
         if (point.hazards.length) addLine(popup, 'Bahaya', point.hazards.join(', '));
+        const sensorTitle = document.createElement('p');
+        sensorTitle.className = 'map-popup-sensors-title';
+        sensorTitle.textContent = point.sensors.length ? 'Sensor (' + point.sensors.length + ')' : 'Belum ada sensor terpasang';
+        popup.appendChild(sensorTitle);
+        point.sensors.forEach((sensor) => {
+            const row = document.createElement('div');
+            row.className = 'map-popup-sensor';
+            const mark = document.createElement('i');
+            mark.className = 'health-dot health-' + sensor.health;
+            const text = document.createElement('span');
+            text.textContent = sensor.name + ' · ' + sensor.parameter + ' — ' + sensor.label + ' (' + sensor.last + ')';
+            row.append(mark, text);
+            popup.appendChild(row);
+        });
         locationMap.appendChild(popup);
         render();
     }

@@ -7,6 +7,8 @@ require dirname(__DIR__) . '/app/locations.php';
 require dirname(__DIR__) . '/app/locations_views.php';
 require dirname(__DIR__) . '/app/sensors.php';
 require dirname(__DIR__) . '/app/sensors_views.php';
+require dirname(__DIR__) . '/app/thresholds.php';
+require dirname(__DIR__) . '/app/thresholds_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -311,6 +313,72 @@ if ($page === 'dashboard'
         flash('error', 'ID sensor tersebut sudah digunakan.');
     }
     redirect_to('/?page=dashboard&section=sensors');
+}
+if ($page === 'dashboard'
+    && in_array($_GET['section'] ?? '', ['parameters', 'thresholds'], true)
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $section = (string) $_GET['section'];
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, $section);
+        exit;
+    }
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan wajib diisi (3–500 karakter).');
+        }
+        if ($section === 'parameters') {
+            if (in_array($action, ['create_parameter', 'update_parameter'], true)) {
+                $data = parse_parameter_input($_POST, $action === 'create_parameter');
+                if ($action === 'update_parameter' && $data['id'] < 1) {
+                    throw new InvalidArgumentException('Parameter tidak valid.');
+                }
+                save_parameter($user, $action, $data, $reason);
+                flash('message', $action === 'create_parameter' ? 'Parameter berhasil ditambahkan.' : 'Parameter berhasil diperbarui.');
+            } elseif ($action === 'delete_parameter') {
+                delete_parameter($user, (int) filter_var(post_value('parameter_id'), FILTER_VALIDATE_INT), $reason);
+                flash('message', 'Parameter berhasil dihapus.');
+            } else {
+                throw new InvalidArgumentException('Tindakan tidak dikenal.');
+            }
+        } else {
+            $thresholdId = (int) filter_var(post_value('threshold_id'), FILTER_VALIDATE_INT);
+            if (in_array($action, ['create_threshold', 'update_threshold'], true)) {
+                $data = parse_threshold_input($_POST);
+                if ($action === 'update_threshold' && $data['id'] < 1) {
+                    throw new InvalidArgumentException('Ambang tidak valid.');
+                }
+                save_threshold($user, $action, $data, $reason);
+                flash('message', $action === 'create_threshold' ? 'Draf ambang disimpan.' : 'Ambang diperbarui sebagai draf.');
+            } elseif ($action === 'new_version') {
+                create_threshold_version($user, $thresholdId, $reason);
+                flash('message', 'Versi baru dibuat sebagai draf.');
+            } elseif ($action === 'delete_threshold') {
+                delete_threshold($user, $thresholdId, $reason);
+                flash('message', 'Ambang dihapus.');
+            } else {
+                change_threshold_state($user, $thresholdId, $action, $reason);
+                flash('message', 'Status ambang diperbarui.');
+            }
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    } catch (PDOException $error) {
+        if (!in_array((string) $error->getCode(), ['23000', '19'], true)) {
+            throw $error;
+        }
+        flash('error', 'Kode sudah digunakan atau data masih dipakai.');
+    }
+    redirect_to('/?page=dashboard&section=' . $section);
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {

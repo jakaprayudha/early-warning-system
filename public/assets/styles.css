@@ -596,3 +596,90 @@ form button span { font-size: 17px; }
 .sensor-record-form .record-button { height: 40px; margin: 0; padding: 0 14px; width: auto; border: 1px solid #bfe3d9; border-radius: 7px; background: #eaf7f3; color: #17705e; cursor: pointer; font: 700 10px "Avenir Next", Avenir, "Segoe UI", sans-serif; }
 .sensor-record-form .record-button:hover { background: #d9f0e8; transform: none; }
 @media (max-width: 900px) { .sensor-summary { grid-template-columns: repeat(2, 1fr); } .sensor-filter { grid-template-columns: 1fr 1fr; } }
+
+.threshold-card header { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.threshold-card h3 small { color: #64748b; font-weight: 600; }
+.threshold-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.threshold-action { display: flex; gap: 8px; align-items: center; }
+.threshold-action input { min-width: 180px; }
+.threshold-action .save-button, .threshold-action .danger-button, .hazard-delete-form .danger-button { min-height: 38px; padding: 0 14px; border-radius: 8px; border: 0; font-weight: 700; cursor: pointer; }
+.threshold-action .save-button { background: #1d4ed8; color: #fff; }
+.threshold-action .danger-button, .hazard-delete-form .danger-button { background: #fee2e2; color: #b91c1c; }
+.severity-chip { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.severity-watch { background: #fef9c3; color: #854d0e; }
+.severity-alert { background: #ffedd5; color: #c2410c; }
+.severity-warning { background: #fee2e2; color: #b91c1c; }
+.approval-draft, .approval-retired, .approval-superseded { background: #e2e8f0; color: #475569; }
+.approval-pending { background: #fef3c7; color: #92400e; }
+.approval-approved { background: #dcfce7; color: #166534; }
+.approval-rejected { background: #fee2e2; color: #b91c1c; }
+.check-row { flex-direction: row; align-items: center; gap: 8px; }
+
+.health-dot { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: #94a3b8; box-shadow: 0 0 0 1px rgba(16, 36, 43, .25); }
+.map-pin .health-dot { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; }
+i.health-dot.health-healthy { background: #1b8d77; }
+i.health-dot.health-delayed { background: #d63a2f; }
+i.health-dot.health-maintenance { background: #e0a32a; }
+i.health-dot.health-unknown { background: #4a90c2; }
+i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
+.map-health-legend { margin-top: 6px; }
+.map-popup-sensors-title { margin: 8px 0 4px; font-weight: 700; font-size: 12px; }
+.map-popup-sensor { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin-bottom: 3px; }
+.map-popup-sensor .health-dot { margin-top: 3px; }
+.location-map-list li button .health-dot { margin-left: auto; }
+
+.threshold-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.approval-tile { border-top: 4px solid #cbd5e1; }
+.approval-tile-pending { border-top-color: #f59e0b; }
+.approval-tile-approved { border-top-color: #16a34a; }
+.approval-tile-rejected { border-top-color: #dc2626; }
+.create-details > summary { cursor: pointer; list-style: none; font-weight: 700; color: #0f766e; padding: 4px 0; }
+.create-details > summary::-webkit-details-marker { display: none; }
+.create-details[open] > summary { margin-bottom: 14px; }
+.threshold-card { background: #fff; border: 1px solid #dfe8ec; border-left: 6px solid #94a3b8; border-radius: 14px; padding: 18px 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(16, 36, 43, .05); }
+.threshold-card.severity-border-watch { border-left-color: #eab308; }
+.threshold-card.severity-border-alert { border-left-color: #f97316; }
+.threshold-card.severity-border-warning { border-left-color: #dc2626; }
+.threshold-head { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.threshold-hazard { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #0f766e; }
+.threshold-rule h3 { margin: 2px 0 4px; font-size: 18px; }
+.threshold-condition { margin: 0; font-size: 15px; color: #475569; }
+.threshold-condition strong { font-size: 26px; color: #10242b; margin: 0 2px; }
+.threshold-condition .op { display: inline-block; min-width: 28px; text-align: center; padding: 2px 8px; border-radius: 6px; background: #eef2f6; font-weight: 700; }
+.threshold-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.version-chip { padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef2f6; color: #475569; }
+.threshold-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px dashed #dfe8ec; }
+.threshold-meta dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #8a9aa5; }
+.threshold-meta dd { margin: 2px 0 0; font-size: 14px; color: #10242b; }
+.threshold-note { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; background: #f3f7f9; font-size: 13px; color: #475569; }
+.threshold-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #edf2f5; }
+.threshold-action { display: flex; gap: 8px; align-items: center; }
+.threshold-action input { min-width: 170px; min-height: 38px; padding: 0 10px; border: 1px solid #cdd9df; border-radius: 8px; }
+.threshold-action .save-button, .threshold-action .danger-button { min-height: 38px; padding: 0 14px; border-radius: 8px; border: 0; font-weight: 700; cursor: pointer; width: auto; }
+.threshold-action .save-button { background: #0f9d8a; color: #fff; }
+.threshold-action .danger-button { background: #fee2e2; color: #b91c1c; }
+.threshold-card .edit-details { margin-top: 12px; }
+.status-pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.status-pill.approval-approved { background: #dcfce7; color: #166534; }
+@media (max-width: 900px) { .threshold-meta { grid-template-columns: 1fr 1fr; } .threshold-summary { grid-template-columns: 1fr 1fr; } }
+.sensor-summary.threshold-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.threshold-summary .sensor-summary-item { width: auto; }
+.threshold-action .save-button, .threshold-action .danger-button { height: 38px; min-height: 38px; padding: 0 14px; line-height: 1; }
+.threshold-action input { height: 38px; min-height: 38px; } .threshold-actions { align-items: center; }
+.threshold-action { margin: 0; flex-direction: row; } .threshold-action button { margin: 0; align-self: center; }
+
+.parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.parameter-card { background: #fff; border: 1px solid #dfe8ec; border-top: 4px solid #0f9d8a; border-radius: 14px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(16, 36, 43, .05); }
+.parameter-card.is-off { border-top-color: #cbd5e1; opacity: .8; }
+.parameter-head { display: flex; gap: 12px; align-items: flex-start; }
+.parameter-head > div { flex: 1; min-width: 0; }
+.parameter-head h3 { margin: 2px 0 4px; font-size: 17px; }
+.parameter-head code { font-size: 12px; color: #64748b; background: #f1f5f8; padding: 2px 6px; border-radius: 6px; }
+.parameter-icon { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: 18px; color: #fff; background: linear-gradient(135deg, #0f9d8a, #1d6fb8); }
+.parameter-card.is-off .parameter-icon { background: #94a3b8; }
+.parameter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.parameter-chips span { padding: 4px 10px; border-radius: 999px; background: #eef2f6; color: #475569; font-size: 12px; font-weight: 600; }
+.parameter-chips .chip-unit { background: #e0f4ee; color: #0f766e; }
+.parameter-desc { margin: 10px 0 0; font-size: 13px; color: #64748b; }
+.parameter-card .edit-details { margin-top: 12px; }
+@media (max-width: 900px) { .parameter-grid { grid-template-columns: 1fr; } }
