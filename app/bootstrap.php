@@ -195,6 +195,44 @@ function db(): PDO
     );
     $connection->exec('CREATE INDEX IF NOT EXISTS sensors_location ON sensors(location_id)');
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS integration_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            token_prefix TEXT NOT NULL,
+            region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            last_used_at INTEGER,
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS sensor_ingest_config (
+            sensor_id INTEGER PRIMARY KEY REFERENCES sensors(id) ON DELETE CASCADE,
+            valid_min REAL,
+            valid_max REAL,
+            late_after_minutes INTEGER NOT NULL DEFAULT 60 CHECK (late_after_minutes BETWEEN 1 AND 10080),
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
+        'CREATE TABLE IF NOT EXISTS sensor_readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_id INTEGER NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
+            value REAL,
+            raw_value TEXT NOT NULL DEFAULT "",
+            source_ts INTEGER,
+            received_at INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ("accepted", "late", "duplicate", "invalid", "out_of_range")),
+            note TEXT NOT NULL DEFAULT "",
+            channel TEXT NOT NULL CHECK (channel IN ("api", "manual", "csv")),
+            token_id INTEGER REFERENCES integration_tokens(id) ON DELETE SET NULL
+        )'
+    );
+    $connection->exec('CREATE INDEX IF NOT EXISTS sensor_readings_sensor ON sensor_readings(sensor_id, source_ts)');
+    $connection->exec('CREATE INDEX IF NOT EXISTS sensor_readings_received ON sensor_readings(received_at)');
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS parameters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT NOT NULL COLLATE NOCASE UNIQUE,

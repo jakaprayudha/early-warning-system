@@ -13,6 +13,8 @@ require dirname(__DIR__) . '/app/rules.php';
 require dirname(__DIR__) . '/app/rules_views.php';
 require dirname(__DIR__) . '/app/recipients.php';
 require dirname(__DIR__) . '/app/recipients_views.php';
+require dirname(__DIR__) . '/app/integrations.php';
+require dirname(__DIR__) . '/app/integrations_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -31,11 +33,15 @@ $allowedPages = [
     'admin',
     'alerts',
     'history',
+    'api-ingest',
     'logout',
 ];
 if (!is_string($page) || !in_array($page, $allowedPages, true)) {
     http_response_code(404);
     $page = 'login';
+}
+if ($page === 'api-ingest') {
+    handle_api_ingest();
 }
 if ($page === 'logout' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect_to('/?page=login');
@@ -483,6 +489,57 @@ if ($page === 'dashboard'
         flash('error', 'Nama kelompok sudah digunakan atau data masih terkait.');
     }
     redirect_to('/?page=dashboard&section=recipients');
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'integrations'
+    && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!user_has_permission($user, 'manage_master_data')) {
+        http_response_code(403);
+        render_access_denied();
+        exit;
+    }
+    if (!csrf_is_valid()) {
+        flash('error', 'Sesi formulir tidak valid. Muat ulang halaman lalu coba lagi.');
+        http_response_code(400);
+        render_dashboard($user, 'integrations');
+        exit;
+    }
+    try {
+        $action = post_value('action');
+        $reason = trim(post_value('reason'));
+        $reasonLength = preg_match_all('/./us', $reason);
+        if ($reasonLength === false || $reasonLength < 3 || $reasonLength > 500) {
+            throw new InvalidArgumentException('Alasan wajib diisi (3–500 karakter).');
+        }
+        $sensorId = (int) filter_var(post_value('sensor_id'), FILTER_VALIDATE_INT);
+        if ($action === 'create_token') {
+            flash('token', create_integration_token($user, post_value('name'), (int) filter_var(post_value('region_id'), FILTER_VALIDATE_INT), $reason));
+            flash('message', 'Token dibuat.');
+        } elseif (in_array($action, ['disable_token', 'enable_token', 'delete_token'], true)) {
+            change_integration_token($user, (int) filter_var(post_value('token_id'), FILTER_VALIDATE_INT), $action, $reason);
+            flash('message', 'Token diperbarui.');
+        } elseif ($action === 'save_config') {
+            save_ingest_config($user, $sensorId, post_value('valid_min'), post_value('valid_max'), post_value('late_after'), $reason);
+            flash('message', 'Rentang valid disimpan.');
+        } elseif ($action === 'manual_reading') {
+            $result = manual_ingest($user, $sensorId, post_value('value'), post_value('source_time'), $reason);
+            flash('message', 'Pembacaan dicatat: ' . ingest_statuses()[$result['status']] . ($result['note'] !== '' ? ' — ' . $result['note'] : ''));
+        } elseif ($action === 'csv_import') {
+            $counts = csv_ingest($user, post_value('csv'), $reason);
+            $parts = [];
+            foreach ($counts as $key => $count) {
+                if ($count > 0) {
+                    $parts[] = (ingest_statuses()[$key] ?? 'Sensor tidak dikenal') . ' ' . $count;
+                }
+            }
+            flash('message', 'Impor selesai: ' . ($parts === [] ? 'tidak ada baris diproses' : implode(', ', $parts)) . '.');
+        } else {
+            throw new InvalidArgumentException('Tindakan tidak dikenal.');
+        }
+    } catch (InvalidArgumentException $error) {
+        flash('error', $error->getMessage());
+    }
+    redirect_to('/?page=dashboard&section=integrations');
 }
 if ($page === 'admin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_is_valid()) {

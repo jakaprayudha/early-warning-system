@@ -406,6 +406,8 @@ function render_dashboard(array $user, string $section = 'overview'): void
         render_rules_page($user, flash('message'), flash('error'));
     } elseif ($section === 'recipients') {
         render_recipients_page($user, flash('message'), flash('error'));
+    } elseif ($section === 'integrations') {
+        render_integrations_page($user, flash('message'), flash('error'), flash('token'));
     } elseif ($section === 'locations') {
         render_locations_page($user, flash('message'), flash('error'));
     } else {

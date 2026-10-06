@@ -106,3 +106,9 @@ Tab Peta menampilkan titik status sensor pada penanda (hijau sehat, merah terlam
 ## Penerima notifikasi (FR-06)
 
 Menu `?page=dashboard&section=recipients`: kelompok penerima per wilayah/bahaya (kanal, jam aktif) beserta anggota. Kontak disamarkan di daftar dan tidak masuk audit; kelompok yang dipakai aturan tidak bisa dihapus (nonaktifkan). Nama kelompok disarankan di form aturan lewat datalist. Seed: `sqlite3 storage/db_ews.sqlite < database/recipients_demo.sql`.
+
+## Integrasi data (FR-07)
+
+Menu `?page=dashboard&section=integrations`: token API per wilayah (hanya hash disimpan, token tampil sekali), input manual, impor CSV (`sensor_code,value,timestamp`), rentang valid dan batas keterlambatan per sensor, serta riwayat pembacaan. Pembacaan ditandai `accepted`, `late`, `duplicate`, `out_of_range`, atau `invalid`.
+
+Endpoint: `POST /?page=api-ingest` dengan `Authorization: Bearer <token>` dan JSON `{"readings":[{"sensor_code":"...","value":1.2,"timestamp":"2026-10-06T08:00:00+07:00"}]}` (maks. 100 per permintaan). Waktu tanpa zona dibaca UTC. Gunakan HTTPS di produksi.
