@@ -457,3 +457,63 @@ if (locationMap) {
     };
     setInterval(refresh, 15000);
 })();
+
+(() => {
+    const page = document.querySelector('[data-tide-page]');
+    if (!page) return;
+    const levels = JSON.parse(page.dataset.levels || '{}');
+    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
+    const levelOf = (m, thresholds) => ['watch', 'alert', 'warning'].reduce((found, key) => {
+        const t = thresholds[key];
+        return t && (t.op === '>' ? m > t.value : m >= t.value) ? key : found;
+    }, 'normal');
+    const trends = { rising: '▲ Naik', falling: '▼ Surut', steady: '■ Stabil' };
+    const source = page.querySelector('[data-tide-source]');
+    const set = (card, field, text) => { const node = card.querySelector('[data-field="' + field + '"]'); if (node) node.textContent = text; };
+    const stat = (name, value) => { const node = page.querySelector('[data-tide-' + name + ']'); if (node) node.textContent = value; };
+
+    const refresh = async () => {
+        try {
+            const response = await fetch(page.dataset.feedUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('feed');
+            const data = await response.json();
+            let alerting = 0; let rising = 0; let max = 0;
+            data.stations.forEach((row) => {
+                const card = page.querySelector('[data-tide-station="' + CSS.escape(row.code) + '"]');
+                if (!card) return;
+                const thresholds = (data.thresholds && data.thresholds[row.code]) || {};
+                const m = Number(row.tide_level_m);
+                const change = Number(row.change_1h_m);
+                const level = levelOf(m, thresholds);
+                const trend = change >= 0.05 ? 'rising' : (change <= -0.05 ? 'falling' : 'steady');
+                max = Math.max(max, m);
+                if (level !== 'normal') alerting += 1;
+                if (trend === 'rising') rising += 1;
+                set(card, 'level_cm', fmt(m, 2));
+                set(card, 'change', (change > 0 ? '+' : '') + fmt(change, 2));
+                set(card, 'wave', fmt(row.wave_height_m));
+                set(card, 'wind', fmt(row.wind_kmh));
+                set(card, 'time', clock(row.observed_at));
+                set(card, 'trend', trends[trend]);
+                card.querySelector('[data-field="trend"]').className = 'river-trend trend-' + trend;
+                const badge = card.querySelector('[data-field="level"]');
+                badge.textContent = levels[level];
+                badge.className = 'weather-level river-' + level;
+                const top = Math.max(2, ...Object.values(thresholds).map((t) => t.value * 1.25));
+                const pct = Math.min(100, Math.round(m / top * 100 / 5) * 5);
+                card.querySelector('[data-field="gauge"]').className = 'river-fill river-' + level + ' bar-w-' + pct;
+            });
+            stat('alerting', String(alerting));
+            stat('rising', String(rising));
+            stat('max', fmt(max, 2));
+            stat('updated', clock(data.generated_at));
+            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
+            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+        } catch (error) {
+            source.className = 'weather-source error';
+            source.lastChild.textContent = 'Gagal memuat data';
+        }
+    };
+    setInterval(refresh, 15000);
+})();
