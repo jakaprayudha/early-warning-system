@@ -112,3 +112,11 @@ Menu `?page=dashboard&section=recipients`: kelompok penerima per wilayah/bahaya 
 Menu `?page=dashboard&section=integrations`: token API per wilayah (hanya hash disimpan, token tampil sekali), input manual, impor CSV (`sensor_code,value,timestamp`), rentang valid dan batas keterlambatan per sensor, serta riwayat pembacaan. Pembacaan ditandai `accepted`, `late`, `duplicate`, `out_of_range`, atau `invalid`.
 
 Endpoint: `POST /?page=api-ingest` dengan `Authorization: Bearer <token>` dan JSON `{"readings":[{"sensor_code":"...","value":1.2,"timestamp":"2026-10-06T08:00:00+07:00"}]}` (maks. 100 per permintaan). Waktu tanpa zona dibaca UTC. Gunakan HTTPS di produksi.
+
+## Laporan & ekspor (FR-12)
+
+Menu `?page=dashboard&section=reports` (izin `view_reports`): filter periode/wilayah/bahaya, ringkasan kejadian (per tingkat, bahaya, wilayah, hari; rata-rata waktu pengakuan dan penyelesaian), kualitas data per sensor, serta ekspor CSV (kejadian, kualitas data, pembacaan; maks. 10.000 baris, UTC, aman dari formula injection). Setiap ekspor dicatat di audit.
+
+## Kesehatan sistem (FR-14)
+
+Menu `?page=dashboard&section=health`: banner status keseluruhan, ringkasan kesehatan sumber (sehat, terlambat, belum ada data, pemeliharaan, nonaktif), pemeriksaan layanan (database, integritas, relasi, penyimpanan, disk, HTTPS, PHP), aktivitas ingest 1 jam/24 jam, dan tabel status sumber yang diurutkan dari yang paling terlambat. Sumber dianggap terlambat bila tidak terlihat lebih dari 2× interval yang diharapkan.

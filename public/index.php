@@ -15,6 +15,10 @@ require dirname(__DIR__) . '/app/recipients.php';
 require dirname(__DIR__) . '/app/recipients_views.php';
 require dirname(__DIR__) . '/app/integrations.php';
 require dirname(__DIR__) . '/app/integrations_views.php';
+require dirname(__DIR__) . '/app/reports.php';
+require dirname(__DIR__) . '/app/reports_views.php';
+require dirname(__DIR__) . '/app/health.php';
+require dirname(__DIR__) . '/app/health_views.php';
 require dirname(__DIR__) . '/app/views.php';
 
 header('X-Content-Type-Options: nosniff');
@@ -93,6 +97,13 @@ if ($page === 'alerts' && !user_has_permission($user, 'handle_alerts')) {
     http_response_code(403);
     render_access_denied();
     exit;
+}
+if ($page === 'dashboard'
+    && ($_GET['section'] ?? '') === 'reports'
+    && $_SERVER['REQUEST_METHOD'] === 'GET'
+    && is_string($_GET['export'] ?? null)
+    && user_has_permission($user, 'view_reports')) {
+    handle_report_export($user, report_filters($_GET), $_GET['export']);
 }
 if ($page === 'history'
     && !user_has_permission($user, 'view_reports')
