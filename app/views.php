@@ -428,6 +428,57 @@ function render_dashboard_overview(array $user): void
     $regionCount = count($regions);
     $openAlertCount = count_alert_events($user, 'open');
     $activeEvents = array_slice(list_alert_events($user, [], true), 0, 3);
+    $healthLabels = sensor_health_labels();
+    $sensors = list_sensors($user);
+    $sensorsByLocation = [];
+    $healthCounts = array_fill_keys(array_keys($healthLabels), 0);
+    $lastDataAt = 0;
+    foreach ($sensors as $sensor) {
+        $healthCounts[$sensor['health']]++;
+        $lastDataAt = max($lastDataAt, (int) $sensor['last_data_at']);
+        $sensorsByLocation[(int) $sensor['location_id']][] = [
+            'name' => $sensor['name'],
+            'parameter' => $sensor['parameter'],
+            'health' => $sensor['health'],
+            'label' => $healthLabels[$sensor['health']] ?? $sensor['health'],
+            'last' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at']),
+        ];
+    }
+    $monitorable = $healthCounts['healthy'] + $healthCounts['delayed'] + $healthCounts['unknown'];
+    $rank = ['delayed' => 4, 'unknown' => 3, 'maintenance' => 2, 'healthy' => 1, 'inactive' => 0];
+    $regionLabels = region_path_labels(list_managed_regions($user));
+    $hazardNames = alert_hazards();
+    $locations = list_monitoring_locations($user);
+    $activeLocationCount = 0;
+    $points = [];
+    foreach ($locations as $location) {
+        $locationSensors = $sensorsByLocation[(int) $location['id']] ?? [];
+        $worst = 'none';
+        $best = -1;
+        foreach ($locationSensors as $item) {
+            if (($rank[$item['health']] ?? 0) > $best) {
+                $best = $rank[$item['health']] ?? 0;
+                $worst = $item['health'];
+            }
+        }
+        $activeLocationCount += (int) $location['is_active'] === 1 ? 1 : 0;
+        $points[] = [
+            'sensorHealth' => $worst,
+            'sensors' => $locationSensors,
+            'id' => (int) $location['id'],
+            'code' => $location['code'],
+            'name' => $location['name'],
+            'lat' => (float) $location['latitude'],
+            'lng' => (float) $location['longitude'],
+            'type' => isset(location_map_styles()[$location['location_type']]) ? $location['location_type'] : 'other',
+            'active' => (int) $location['is_active'] === 1,
+            'region' => $regionLabels[(int) $location['region_id']] ?? $location['region_name'],
+            'elevation' => $location['elevation_m'],
+            'datum' => $location['vertical_datum'],
+            'hazards' => array_map(static fn($code) => $hazardNames[$code] ?? (string) $code, $location['hazards']),
+        ];
+    }
+    $styles = location_map_styles();
     $userCount = null;
     $pendingCount = null;
     if ($user['role'] === 'system_admin') {
@@ -449,8 +500,8 @@ function render_dashboard_overview(array $user): void
     <div class="metric-grid">
         <article class="metric-card">
             <div class="metric-top"><span>Lokasi dipantau</span><span class="metric-icon mint">⌖</span></div>
-            <strong class="metric-value metric-unavailable">—</strong>
-            <p class="metric-foot">Master lokasi belum tersedia</p>
+            <strong class="metric-value"><?= number_format($activeLocationCount, 0, ',', '.') ?></strong>
+            <p class="metric-foot"><?= $locations === [] ? 'Master lokasi belum tersedia' : 'Dari ' . count($locations) . ' lokasi terdaftar' ?></p>
         </article>
         <article class="metric-card">
             <div class="metric-top"><span>Peringatan aktif</span><span class="metric-icon amber">⌁</span></div>
@@ -459,8 +510,8 @@ function render_dashboard_overview(array $user): void
         </article>
         <article class="metric-card">
             <div class="metric-top"><span>Sumber data sehat</span><span class="metric-icon blue">◉</span></div>
-            <strong class="metric-value metric-unavailable">—</strong>
-            <p class="metric-foot">Sensor/feed belum terhubung</p>
+            <strong class="metric-value"><?= $sensors === [] ? '—' : number_format($healthCounts['healthy'], 0, ',', '.') . '<small> / ' . number_format(count($sensors), 0, ',', '.') . '</small>' ?></strong>
+            <p class="metric-foot"><?= $sensors === [] ? 'Sensor/feed belum terhubung' : $healthCounts['delayed'] . ' terlambat · ' . $healthCounts['unknown'] . ' belum ada data · ' . $healthCounts['maintenance'] . ' pemeliharaan' ?></p>
         </article>
         <article class="metric-card">
             <div class="metric-top"><span>Wilayah cakupan</span><span class="metric-icon violet">▦</span></div>
@@ -472,25 +523,43 @@ function render_dashboard_overview(array $user): void
         <section class="panel map-panel">
             <div class="panel-heading">
                 <div><h2>Peta pemantauan</h2><p>Distribusi kondisi menurut lokasi</p></div>
-                <span class="panel-tag"><span class="status-dot muted-dot"></span>Belum terhubung</span>
+                <span class="panel-tag"><span class="status-dot muted-dot"></span><?= count($points) ?> lokasi</span>
             </div>
-            <div class="map-canvas" role="img" aria-label="Peta pemantauan belum tersedia karena lokasi dan data peta belum dikonfigurasi">
-                <div class="map-lines map-lines-one"></div><div class="map-lines map-lines-two"></div>
-                <div class="map-empty">
-                    <span class="map-empty-icon" aria-hidden="true">⌖</span>
-                    <strong>Peta akan tampil di sini</strong>
-                    <p>Tambahkan lokasi pantau beserta koordinat untuk memulai visualisasi.</p>
-                    <?php if ($user['role'] === 'system_admin' || user_has_permission($user, 'manage_master_data')): ?>
-                        <a href="/?page=dashboard&section=locations">Buka wilayah & lokasi <span aria-hidden="true">→</span></a>
-                    <?php endif; ?>
+            <?php if ($points === []): ?>
+                <div class="map-canvas" role="img" aria-label="Peta pemantauan belum tersedia karena lokasi belum dikonfigurasi">
+                    <div class="map-lines map-lines-one"></div><div class="map-lines map-lines-two"></div>
+                    <div class="map-empty">
+                        <span class="map-empty-icon" aria-hidden="true">⌖</span>
+                        <strong>Peta akan tampil di sini</strong>
+                        <p>Tambahkan lokasi pantau beserta koordinat untuk memulai visualisasi.</p>
+                        <?php if ($user['role'] === 'system_admin' || user_has_permission($user, 'manage_master_data')): ?>
+                            <a href="/?page=dashboard&section=locations">Buka wilayah & lokasi <span aria-hidden="true">→</span></a>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                <span class="map-attribution">Peta tersedia setelah sumber peta dikonfigurasi</span>
-            </div>
+            <?php else: ?>
+                <div class="location-map overview-map" data-location-map data-points="<?= e(json_encode($points, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) ?>" data-styles="<?= e(json_encode($styles, JSON_THROW_ON_ERROR)) ?>" role="application" aria-label="Peta lokasi pantau" tabindex="0">
+                    <div class="map-tiles" data-map-tiles></div>
+                    <div class="map-markers" data-map-markers></div>
+                    <div class="map-controls">
+                        <button type="button" data-map-zoom="1" aria-label="Perbesar">+</button>
+                        <button type="button" data-map-zoom="-1" aria-label="Perkecil">−</button>
+                        <button type="button" data-map-fit aria-label="Tampilkan semua lokasi">⤢</button>
+                    </div>
+                    <div class="map-attribution">© OpenStreetMap contributors</div>
+                    <div class="map-coords" data-map-coords>Arahkan kursor ke peta</div>
+                </div>
+            <?php endif; ?>
             <div class="map-legend">
-                <span><i class="legend-dot normal"></i>Normal</span>
-                <span><i class="legend-dot watch"></i>Waspada</span>
-                <span><i class="legend-dot alert"></i>Siaga / Awas</span>
-                <span><i class="legend-dot offline"></i>Data terputus</span>
+                <?php foreach ($styles as $key => $style): ?>
+                    <span><i class="map-pin-sample" data-map-legend="<?= e($key) ?>"></i><?= e($style['label']) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <div class="map-legend map-health-legend">
+                <strong>Status sensor:</strong>
+                <?php foreach ($healthLabels + ['none' => 'Tanpa sensor'] as $key => $label): ?>
+                    <span><i class="health-dot health-<?= e($key) ?>"></i><?= e($label) ?></span>
+                <?php endforeach; ?>
             </div>
         </section>
         <section class="panel incident-panel">
@@ -517,13 +586,15 @@ function render_dashboard_overview(array $user): void
             <?php endif; ?>
             <div class="source-status">
                 <div class="source-status-heading"><strong>Status sumber data</strong><a href="/?page=dashboard&section=sensors">Lihat sumber</a></div>
-                <div class="source-row"><span><i class="source-indicator unavailable"></i>Sensor & feed</span><strong>Belum dikonfigurasi</strong></div>
-                <div class="source-row"><span><i class="source-indicator unavailable"></i>Pembaruan terakhir</span><strong>Belum tersedia</strong></div>
+                <div class="source-row"><span><i class="source-indicator <?= $sensors === [] ? 'unavailable' : ($healthCounts['delayed'] > 0 ? 'delayed' : 'healthy') ?>"></i>Sensor & feed</span><strong><?= $sensors === [] ? 'Belum dikonfigurasi' : $healthCounts['healthy'] . ' dari ' . count($sensors) . ' sehat' ?></strong></div>
+                <div class="source-row"><span><i class="source-indicator <?= $lastDataAt === 0 ? 'unavailable' : 'healthy' ?>"></i>Pembaruan terakhir</span><strong><?= $lastDataAt === 0 ? 'Belum tersedia' : e(sensor_age_label($lastDataAt)) ?></strong></div>
             </div>
         </section>
     </div>
+    <?php $isManager = $user['role'] === 'system_admin' || user_has_permission($user, 'manage_master_data'); ?>
+    <?php if (!$isManager || $locations === []): ?>
     <section class="panel setup-panel">
-        <?php if ($user['role'] === 'system_admin' || user_has_permission($user, 'manage_master_data')): ?>
+        <?php if ($isManager): ?>
             <div class="setup-copy">
                 <span class="setup-icon" aria-hidden="true">✦</span>
                 <div><strong>Mulai siapkan pemantauan EWS</strong><p>Lengkapi konfigurasi master sebelum sistem dapat memetakan risiko dan membuat peringatan.</p></div>
@@ -542,6 +613,7 @@ function render_dashboard_overview(array $user): void
             <a class="panel-link" href="/?page=history">Buka riwayat peringatan <span aria-hidden="true">→</span></a>
         <?php endif; ?>
     </section>
+    <?php endif; ?>
     <?php if ($user['role'] === 'system_admin'): ?>
         <div class="dashboard-admin-summary">
             <span>Akun aktif <strong><?= number_format($userCount, 0, ',', '.') ?></strong></span>

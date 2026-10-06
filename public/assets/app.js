@@ -182,6 +182,15 @@ if (locationMap) {
             popup.appendChild(row);
         });
         locationMap.appendChild(popup);
+        const { w, h } = size();
+        const position = project(point.lat, point.lng);
+        const dx = position.x < 40 ? 40 - position.x : (position.x > w - 40 ? w - 40 - position.x : 0);
+        const dy = Math.max(0, 12 - (position.y - 26 - popup.offsetHeight));
+        if (dx || dy) {
+            const scale = world();
+            state.lng = xToLng(lngToX(state.lng) - dx / scale);
+            state.lat = yToLat(mercatorY(state.lat) - dy / scale);
+        }
         render();
     }
 
@@ -231,7 +240,9 @@ if (locationMap) {
         if (popup && selectedId !== null) {
             const point = points.find((item) => item.id === selectedId);
             const position = project(point.lat, point.lng);
-            popup.style.transform = 'translate(' + position.x + 'px,' + (position.y - 30) + 'px)';
+            const { w } = size();
+            const left = Math.max(8, Math.min(w - popup.offsetWidth - 8, position.x - popup.offsetWidth / 2));
+            popup.style.transform = 'translate(' + left + 'px,' + (position.y - 26 - popup.offsetHeight) + 'px)';
         }
     };
 

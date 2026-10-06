@@ -67,8 +67,8 @@ SELECT 'SN-' || substr(l.code, 4),
   CASE l.hazard WHEN 'river_flood' THEN 'cm' WHEN 'coastal_tide' THEN 'm' WHEN 'weather' THEN 'mm/jam' ELSE 'km/jam' END,
   CASE l.hazard WHEN 'river_flood' THEN 'http_api' WHEN 'coastal_tide' THEN 'file_upload' WHEN 'weather' THEN 'mqtt' ELSE 'manual' END,
   'Tim teknis BPBD Deli Serdang', 15, 'active',
-  strftime('%s','now') - (ml.id % 5) * 420 - 120,
-  strftime('%s','now') - (ml.id % 5) * 420 - 120,
+  strftime('%s','now') - (ml.id % 4) * 360 - 120,
+  strftime('%s','now') - (ml.id % 4) * 360 - 120,
   CASE l.hazard WHEN 'river_flood' THEN (90 + ml.id * 7) || ' cm' WHEN 'coastal_tide' THEN '1.' || (ml.id % 9) || ' m'
     WHEN 'weather' THEN (8 + ml.id) || ' mm/jam' ELSE (20 + ml.id * 2) || ' km/jam' END,
   '', strftime('%s','now'), strftime('%s','now')
