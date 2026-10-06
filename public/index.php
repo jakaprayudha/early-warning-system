@@ -55,6 +55,7 @@ $allowedPages = [
     'ews',
     'sensor-detail',
     'sensor-label',
+    'sensor-export',
     'api-river-feed',
     'river-monitor',
     'api-tide-feed',
@@ -202,7 +203,7 @@ if ($page === 'api-river-feed') {
     }
     handle_river_feed($user);
 }
-if ($page === 'sensor-detail' || $page === 'sensor-label') {
+if ($page === 'sensor-detail' || $page === 'sensor-label' || $page === 'sensor-export') {
     if ($user === null) {
         $_SESSION['after_login'] = $_SERVER['REQUEST_URI'] ?? '/?page=dashboard';
         redirect_to('/?page=login');
@@ -224,6 +225,9 @@ if ($page === 'sensor-detail' || $page === 'sensor-label') {
         http_response_code(404);
         render_access_denied();
         exit;
+    }
+    if ($page === 'sensor-export') {
+        handle_sensor_export($sensor);
     }
     render_sensor_detail_page($sensor, get_sensor_specs([(int) $sensor['id']])[(int) $sensor['id']] ?? null, $canManage);
     exit;

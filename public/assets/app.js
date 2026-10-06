@@ -1099,3 +1099,49 @@ document.addEventListener('submit', (event) => {
     button.addEventListener('click', () => window.print());
   });
 })();
+
+(() => {
+    const canvases = document.querySelectorAll('canvas[data-history]');
+    const fmt = (ts) => new Date(ts * 1000).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const draw = (canvas) => {
+        const points = JSON.parse(canvas.dataset.history || '[]');
+        if (points.length === 0) return;
+        const ratio = window.devicePixelRatio || 1;
+        const width = canvas.clientWidth;
+        const height = 260;
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(ratio, ratio);
+        const pad = { l: 48, r: 12, t: 12, b: 28 };
+        const xs = points.map((p) => p[0]);
+        const ys = points.map((p) => p[1]);
+        const x0 = Math.min(...xs), x1 = Math.max(...xs) || x0 + 1;
+        let y0 = Math.min(...ys), y1 = Math.max(...ys);
+        if (y0 === y1) { y0 -= 1; y1 += 1; }
+        const px = (x) => pad.l + ((x - x0) / (x1 - x0 || 1)) * (width - pad.l - pad.r);
+        const py = (y) => pad.t + (1 - (y - y0) / (y1 - y0)) * (height - pad.t - pad.b);
+        ctx.clearRect(0, 0, width, height);
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = '#5b6b60';
+        ctx.strokeStyle = '#e1e8e2';
+        for (let i = 0; i <= 4; i++) {
+            const v = y0 + ((y1 - y0) * i) / 4;
+            const y = py(v);
+            ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(width - pad.r, y); ctx.stroke();
+            ctx.fillText(v.toFixed(1), 4, y + 4);
+        }
+        ctx.fillText(fmt(x0), pad.l, height - 8);
+        ctx.textAlign = 'right';
+        ctx.fillText(fmt(x1), width - pad.r, height - 8);
+        ctx.textAlign = 'left';
+        ctx.strokeStyle = '#1f7a4d';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach((p, i) => (i === 0 ? ctx.moveTo(px(p[0]), py(p[1])) : ctx.lineTo(px(p[0]), py(p[1]))));
+        ctx.stroke();
+        if (points.length === 1) { ctx.fillStyle = '#1f7a4d'; ctx.fillRect(px(points[0][0]) - 2, py(points[0][1]) - 2, 4, 4); }
+    };
+    canvases.forEach(draw);
+    window.addEventListener('resize', () => canvases.forEach(draw));
+})();

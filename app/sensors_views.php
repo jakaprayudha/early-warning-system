@@ -267,6 +267,63 @@ function render_sensor_label_page(array $sensors, bool $single): void
     <?php
 }
 
+function render_sensor_history(array $sensor): void
+{
+    $range = sensor_history_range();
+    $rows = sensor_history((int) $sensor['id'], $range['start'], $range['end']);
+    $points = [];
+    $values = [];
+    foreach ($rows as $row) {
+        if ($row['value'] !== null && in_array($row['status'], ['accepted', 'late'], true)) {
+            $points[] = [(int) $row['at'], (float) $row['value']];
+            $values[] = (float) $row['value'];
+        }
+    }
+    if (count($points) > 600) {
+        $step = (int) ceil(count($points) / 600);
+        $points = array_values(array_filter($points, static fn(array $p, int $i): bool => $i % $step === 0, ARRAY_FILTER_USE_BOTH));
+    }
+    $code = rawurlencode((string) $sensor['code']);
+    $query = 'code=' . $code . '&amp;from=' . e($range['from']) . '&amp;to=' . e($range['to']);
+    $statuses = ['accepted' => 'Diterima', 'late' => 'Terlambat', 'duplicate' => 'Duplikat', 'invalid' => 'Tidak valid', 'out_of_range' => 'Di luar rentang'];
+    $shown = array_slice(array_reverse($rows), 0, 200);
+    ?>
+    <section class="panel monitor-table sensor-history">
+        <h2>Data historis</h2>
+        <form class="history-range" method="get" action="/">
+            <input type="hidden" name="page" value="sensor-detail">
+            <input type="hidden" name="code" value="<?= e($sensor['code']) ?>">
+            <label>Dari<input type="date" name="from" value="<?= e($range['from']) ?>"></label>
+            <label>Sampai<input type="date" name="to" value="<?= e($range['to']) ?>"></label>
+            <button class="save-button" type="submit">Tampilkan</button>
+            <a class="ghost-link" href="/?page=sensor-export&amp;<?= $query ?>">⇩ Ekspor CSV</a>
+        </form>
+        <?php if ($values === []): ?>
+            <p class="scope-hint">Belum ada data pada rentang ini.</p>
+        <?php else: ?>
+            <div class="sensor-summary">
+                <div class="sensor-summary-item"><strong><?= count($values) ?></strong><span>Data valid</span></div>
+                <div class="sensor-summary-item"><strong><?= e(rtrim(rtrim(number_format(min($values), 2, '.', ''), '0'), '.')) ?></strong><span>Minimum <?= e($sensor['unit']) ?></span></div>
+                <div class="sensor-summary-item"><strong><?= e(rtrim(rtrim(number_format(max($values), 2, '.', ''), '0'), '.')) ?></strong><span>Maksimum <?= e($sensor['unit']) ?></span></div>
+                <div class="sensor-summary-item"><strong><?= e(rtrim(rtrim(number_format(array_sum($values) / count($values), 2, '.', ''), '0'), '.')) ?></strong><span>Rata-rata <?= e($sensor['unit']) ?></span></div>
+            </div>
+            <canvas class="history-chart" data-history="<?= e(json_encode($points)) ?>" data-unit="<?= e($sensor['unit']) ?>" height="260"></canvas>
+            <div class="table-scroll">
+                <table class="history-table">
+                    <thead><tr><th>Waktu</th><th>Nilai</th><th>Status</th><th>Kanal</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($shown as $row): ?>
+                        <tr><td><?= e(date('d M Y H:i', (int) $row['at'])) ?></td><td><?= e($row['value'] === null ? '-' : (string) $row['value']) ?> <?= e($sensor['unit']) ?></td><td><?= e($statuses[$row['status']] ?? $row['status']) ?></td><td><?= e($row['channel']) ?></td></tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if (count($rows) > 200): ?><p class="scope-hint">Menampilkan 200 data terbaru dari <?= count($rows) ?>. Ekspor CSV untuk data lengkap.</p><?php endif; ?>
+        <?php endif; ?>
+    </section>
+    <?php
+}
+
 function render_sensor_detail_page(array $sensor, ?array $spec, bool $canManage): void
 {
     $labels = sensor_health_labels();
@@ -318,6 +375,7 @@ function render_sensor_detail_page(array $sensor, ?array $spec, bool $canManage)
             </dl>
             <?php if (!$filled): ?><p class="scope-hint">Spesifikasi belum diisi.</p><?php endif; ?>
         </section>
+        <?php render_sensor_history($sensor); ?>
     </main>
     </body>
     </html>

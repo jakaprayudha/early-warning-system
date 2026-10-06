@@ -187,3 +187,6 @@ Kartu titik di Monitoring tornado punya tautan **Buka monitoring penuh** ke `/?p
 - Sensor dihubungkan ke parameter lewat "Parameter operasional". Aturan aktif dievaluasi terhadap ambang berstatus disetujui, dengan agregasi, persistensi, histeresis (reset), jam aktif, dan konversi satuan.
 - Berjalan otomatis setiap data masuk (API/CSV/manual), lewat tombol "Evaluasi aturan sekarang" di menu Aturan, atau cron: `* * * * * php bin/evaluate-alerts.php`.
 - Kejadian dibuat/ditutup otomatis dan eskalasi dicatat di log. Pengiriman notifikasi nyata (email/WA/SMS) belum aktif. Feed simulasi monitoring tidak menulis ke `sensor_readings`.
+
+## Data historis sensor
+Halaman detail sensor (`?page=sensor-detail&code=`) menampilkan filter tanggal (maks. 1 tahun), ringkasan min/maks/rata-rata, grafik, dan tabel 200 data terbaru. "Ekspor CSV" (`?page=sensor-export`) mengunduh data lengkap rentang tersebut. Data berasal dari `sensor_readings` (API/CSV/manual).

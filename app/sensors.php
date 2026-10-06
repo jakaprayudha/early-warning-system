@@ -415,3 +415,68 @@ function sensor_find_by_code(array $user, string $code): ?array
 
     return null;
 }
+
+
+function sensor_history_range(): array
+{
+    $tz = new DateTimeZone(date_default_timezone_get());
+    $parse = static function (mixed $value, string $fallback) use ($tz): DateTimeImmutable {
+        $text = is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : $fallback;
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $text, $tz);
+
+        return $date === false ? new DateTimeImmutable($fallback, $tz) : $date;
+    };
+    $to = $parse($_GET['to'] ?? null, 'today');
+    $from = $parse($_GET['from'] ?? null, $to->modify('-6 days')->format('Y-m-d'));
+    if ($from > $to) {
+        [$from, $to] = [$to, $from];
+    }
+    if ($from < $to->modify('-366 days')) {
+        $from = $to->modify('-366 days');
+    }
+
+    return [
+        'from' => $from->format('Y-m-d'),
+        'to' => $to->format('Y-m-d'),
+        'start' => $from->getTimestamp(),
+        'end' => $to->modify('+1 day')->getTimestamp() - 1,
+    ];
+}
+
+function sensor_history(int $sensorId, int $start, int $end, int $limit = 100000): array
+{
+    $statement = db()->prepare(
+        'SELECT id, value, raw_value, status, channel, note, COALESCE(source_ts, received_at) AS at
+         FROM sensor_readings
+         WHERE sensor_id = :id AND COALESCE(source_ts, received_at) BETWEEN CAST(:start AS INTEGER) AND CAST(:end AS INTEGER)
+         ORDER BY at ASC, id ASC LIMIT ' . $limit
+    );
+    $statement->execute(['id' => $sensorId, 'start' => $start, 'end' => $end]);
+
+    return $statement->fetchAll();
+}
+
+function handle_sensor_export(array $sensor): void
+{
+    $range = sensor_history_range();
+    $rows = sensor_history((int) $sensor['id'], $range['start'], $range['end']);
+    $name = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $sensor['code']) . '_' . $range['from'] . '_' . $range['to'] . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $name . '"');
+    $out = fopen('php://output', 'wb');
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, ['sensor_code', 'waktu', 'nilai', 'satuan', 'status', 'kanal', 'catatan'], ',', '"', '');
+    $guard = static fn(string $text): string => preg_match('/^[=+\-@\t\r]/', $text) === 1 ? "'" . $text : $text;
+    foreach ($rows as $row) {
+        fputcsv($out, [
+            $sensor['code'],
+            date('Y-m-d H:i:s', (int) $row['at']),
+            $row['value'] === null ? '' : $row['value'],
+            $sensor['unit'],
+            $row['status'],
+            $row['channel'],
+            $guard((string) $row['note']),
+        ], ',', '"', '');
+    }
+    exit;
+}
