@@ -27,6 +27,14 @@ function render_sensor_fields(?array $sensor, array $locations): void
         </select>
     </label>
     <label>Parameter<input name="parameter" maxlength="60" value="<?= e($value('parameter')) ?>" placeholder="contoh: Tinggi muka air" required></label>
+    <label>Parameter operasional (untuk aturan peringatan)
+        <select name="parameter_id">
+            <option value="">Tidak dipakai evaluasi</option>
+            <?php foreach (db()->query('SELECT id, name, unit FROM parameters WHERE is_active = 1 ORDER BY name COLLATE NOCASE')->fetchAll() as $param): ?>
+                <option value="<?= (int) $param['id'] ?>" <?= $sensor !== null && (int) ($sensor['parameter_id'] ?? 0) === (int) $param['id'] ? 'selected' : '' ?>><?= e($param['name'] . ($param['unit'] !== '' ? ' (' . $param['unit'] . ')' : '')) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
     <label>Satuan<input name="unit" maxlength="24" value="<?= e($value('unit')) ?>" placeholder="cm"></label>
     <label>Protokol koneksi<?php $select('protocol', sensor_protocols(), $value('protocol', 'manual')); ?></label>
     <label>Interval data (menit)<input name="expected_interval_minutes" type="number" min="1" max="10080" value="<?= e($value('expected_interval_minutes', '15')) ?>" required></label>

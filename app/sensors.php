@@ -140,6 +140,18 @@ function parse_sensor_input(array $post, bool $create): array
         || $length($contact) > 120 || $length($notes) > 500) {
         throw new InvalidArgumentException('Parameter wajib diisi (2–60 karakter); satuan maks 24, kontak maks 120, catatan maks 500.');
     }
+    $parameterId = null;
+    if (($post['parameter_id'] ?? '') !== '') {
+        $parameterId = filter_var($post['parameter_id'], FILTER_VALIDATE_INT);
+        $found = $parameterId === false ? false : db()->prepare('SELECT 1 FROM parameters WHERE id = ?');
+        if ($found !== false) {
+            $found->execute([$parameterId]);
+            $found = $found->fetchColumn();
+        }
+        if ($found === false) {
+            throw new InvalidArgumentException('Parameter operasional tidak ditemukan.');
+        }
+    }
     $endpoint = trim((string) ($post['endpoint'] ?? ''));
     if ($endpoint !== '') {
         $scheme = strtolower((string) parse_url($endpoint, PHP_URL_SCHEME));
@@ -161,6 +173,7 @@ function parse_sensor_input(array $post, bool $create): array
         'sensor_type' => $type,
         'location_id' => $locationId,
         'parameter' => $parameter,
+        'parameter_id' => $parameterId,
         'unit' => $unit,
         'protocol' => $protocol,
         'endpoint' => $endpoint,
@@ -193,6 +206,7 @@ function save_sensor(array $user, string $action, array $data, string $reason): 
             'sensor_type' => $data['sensor_type'],
             'location_id' => $data['location_id'],
             'parameter' => $data['parameter'],
+            'parameter_id' => $data['parameter_id'],
             'unit' => $data['unit'],
             'protocol' => $data['protocol'],
             'endpoint' => $data['endpoint'],
@@ -204,10 +218,10 @@ function save_sensor(array $user, string $action, array $data, string $reason): 
         $now = time();
         if ($action === 'create_sensor') {
             $insert = $connection->prepare(
-                'INSERT INTO sensors (code, name, sensor_type, location_id, parameter, unit, protocol,
+                'INSERT INTO sensors (code, name, sensor_type, location_id, parameter, parameter_id, unit, protocol,
                     endpoint, technical_contact, expected_interval_minutes, status, notes,
                     created_by, updated_by, created_at, updated_at)
-                 VALUES (:code, :name, :sensor_type, :location_id, :parameter, :unit, :protocol,
+                 VALUES (:code, :name, :sensor_type, :location_id, :parameter, :parameter_id, :unit, :protocol,
                     :endpoint, :technical_contact, :expected_interval_minutes, :status, :notes,
                     :actor, :actor, :now, :now)'
             );
@@ -220,7 +234,7 @@ function save_sensor(array $user, string $action, array $data, string $reason): 
             $old = sensor_in_scope($user, $sensorId);
             $update = $connection->prepare(
                 'UPDATE sensors SET name = :name, sensor_type = :sensor_type, location_id = :location_id,
-                    parameter = :parameter, unit = :unit, protocol = :protocol, endpoint = :endpoint,
+                    parameter = :parameter, parameter_id = :parameter_id, unit = :unit, protocol = :protocol, endpoint = :endpoint,
                     technical_contact = :technical_contact,
                     expected_interval_minutes = :expected_interval_minutes, status = :status,
                     notes = :notes, updated_by = :actor, updated_at = :now

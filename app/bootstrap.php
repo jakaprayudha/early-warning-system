@@ -470,6 +470,23 @@ function db(): PDO
             $connection->exec('PRAGMA foreign_keys = ON');
         }
     }
+    $sensorColumns = $connection->query('PRAGMA table_info(sensors)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('parameter_id', $sensorColumns, true)) {
+        $connection->exec('ALTER TABLE sensors ADD COLUMN parameter_id INTEGER REFERENCES parameters(id) ON DELETE SET NULL');
+    }
+    $connection->exec(
+        'UPDATE sensors SET parameter_id = (
+            SELECT parameters.id FROM parameters WHERE parameters.code = CASE sensors.sensor_type
+                WHEN "rain_gauge" THEN "rain_1h" WHEN "anemometer" THEN "wind_speed"
+                WHEN "water_level" THEN "water_level" WHEN "tide_gauge" THEN "tide_height" END)
+         WHERE parameter_id IS NULL'
+    );
+    $eventColumns = $connection->query('PRAGMA table_info(alert_events)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('rule_id', $eventColumns, true)) {
+        $connection->exec('ALTER TABLE alert_events ADD COLUMN rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL');
+        $connection->exec('ALTER TABLE alert_events ADD COLUMN location_id INTEGER REFERENCES monitoring_locations(id) ON DELETE SET NULL');
+    }
+    $connection->exec('CREATE INDEX IF NOT EXISTS alert_events_rule_location ON alert_events(rule_id, location_id, handling_status)');
     $connection->exec(
         'CREATE INDEX IF NOT EXISTS alert_events_status_region
          ON alert_events(handling_status, region_id, started_at)'

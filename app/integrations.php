@@ -272,6 +272,7 @@ function manual_ingest(array $user, int $sensorId, string $value, string $time, 
     $sensor = sensor_in_scope($user, $sensorId);
     $result = ingest_reading($sensor, $value, trim($time) === '' ? null : $time, 'manual');
     location_audit((int) $user['id'], 'ingest.manual', ['sensor' => $sensor['code'], 'status' => $result['status']], $reason);
+    evaluate_alert_rules_safely();
 
     return $result;
 }
@@ -302,6 +303,7 @@ function csv_ingest(array $user, string $text, string $reason): array
         $counts[$result['status']]++;
     }
     location_audit((int) $user['id'], 'ingest.csv', $counts, $reason);
+    evaluate_alert_rules_safely();
 
     return $counts;
 }
@@ -416,5 +418,6 @@ function handle_api_ingest(): never
         $result = ingest_reading($sensor, $item['value'] ?? null, $item['timestamp'] ?? null, 'api', (int) $token['id']);
         $results[] = ['sensor_code' => $sensor['code'], 'status' => $result['status'], 'note' => $result['note']];
     }
+    evaluate_alert_rules_safely();
     api_json(200, ['results' => $results]);
 }

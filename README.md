@@ -178,3 +178,12 @@ Kartu pos di Monitoring pasang surut punya tautan **Buka monitoring penuh** ke `
 ### Halaman monitoring penuh (tornado)
 
 Kartu titik di Monitoring tornado punya tautan **Buka monitoring penuh** ke `/?page=tornado-monitor&code=<kode>`: layar penuh tanpa sidebar/header dengan nilai realtime, grafik kecepatan angin (dengan garis ambang), hembusan maksimum, tekanan udara, perubahan 1 jam, dan tabel data terbaru (polling 5 detik). Endpoint: `/?page=api-tornado-feed&code=<kode>&history=1`.
+
+## Spesifikasi sensor, QR, dan akun
+- Menu Sensor: tombol "Spesifikasi" per sensor; QR di kartu mengarah ke halaman detail sensor (`?page=sensor-detail&code=`), label cetak di `?page=sensor-label`. Cetak QR dari domain produksi.
+- Pengguna: admin dapat mengatur password langsung dan menghapus akun (kecuali diri sendiri dan super admin).
+
+## Evaluasi aturan otomatis (FR-08)
+- Sensor dihubungkan ke parameter lewat "Parameter operasional". Aturan aktif dievaluasi terhadap ambang berstatus disetujui, dengan agregasi, persistensi, histeresis (reset), jam aktif, dan konversi satuan.
+- Berjalan otomatis setiap data masuk (API/CSV/manual), lewat tombol "Evaluasi aturan sekarang" di menu Aturan, atau cron: `* * * * * php bin/evaluate-alerts.php`.
+- Kejadian dibuat/ditutup otomatis dan eskalasi dicatat di log. Pengiriman notifikasi nyata (email/WA/SMS) belum aktif. Feed simulasi monitoring tidak menulis ke `sensor_readings`.

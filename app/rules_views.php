@@ -68,6 +68,13 @@ function render_rules_page(array $user, ?string $message, ?string $error): void
             <div class="sensor-summary-item approval-tile approval-tile-pending"><strong><?= $withEscalation ?></strong><span>Punya eskalasi</span></div>
             <div class="sensor-summary-item approval-tile approval-tile-rejected"><strong><?= $total - $active ?></strong><span>Nonaktif</span></div>
         </div>
+        <form class="sensor-qr-actions" method="post" action="<?= $action ?>">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="evaluate_now">
+            <input type="hidden" name="reason" value="Evaluasi manual">
+            <button class="save-button" type="submit">▶ Evaluasi aturan sekarang</button>
+            <span class="scope-hint">Evaluasi juga berjalan otomatis setiap ada data sensor masuk (API, CSV, manual) dan lewat <code>php bin/evaluate-alerts.php</code>.</span>
+        </form>
         <section class="panel hazard-create-panel">
             <details class="create-details">
                 <summary><span>+ Tambah aturan</span></summary>

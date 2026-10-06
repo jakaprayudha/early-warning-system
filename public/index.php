@@ -9,6 +9,7 @@ require dirname(__DIR__) . '/app/sensors.php';
 require dirname(__DIR__) . '/app/sensors_views.php';
 require dirname(__DIR__) . '/app/thresholds.php';
 require dirname(__DIR__) . '/app/thresholds_views.php';
+require dirname(__DIR__) . '/app/evaluator.php';
 require dirname(__DIR__) . '/app/rules.php';
 require dirname(__DIR__) . '/app/rules_views.php';
 require dirname(__DIR__) . '/app/recipients.php';
@@ -601,6 +602,12 @@ if ($page === 'dashboard'
             }
             save_alert_rule($user, $action, $data, $reason);
             flash('message', $action === 'create_rule' ? 'Aturan berhasil ditambahkan.' : 'Aturan berhasil diperbarui.');
+        } elseif ($action === 'evaluate_now') {
+            $result = evaluate_alert_rules();
+            flash('message', sprintf(
+                'Evaluasi selesai: %d aturan aktif, %d lokasi dicek — %d kejadian baru, %d ditutup, %d eskalasi.',
+                $result['rules'], $result['locations'], $result['created'], $result['closed'], $result['escalated']
+            ));
         } elseif ($action === 'delete_rule') {
             delete_alert_rule($user, (int) filter_var(post_value('rule_id'), FILTER_VALIDATE_INT), $reason);
             flash('message', 'Aturan dihapus.');
