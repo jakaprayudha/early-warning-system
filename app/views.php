@@ -468,8 +468,10 @@ function build_monitoring_map_points(array $user, array $sensors): array
     foreach ($sensors as $sensor) {
         $healthCounts[$sensor['health']]++;
         $sensorsByLocation[(int) $sensor['location_id']][] = [
+            'code' => $sensor['code'],
             'name' => $sensor['name'],
             'parameter' => $sensor['parameter'],
+            'value' => (string) $sensor['last_value'],
             'health' => $sensor['health'],
             'label' => $healthLabels[$sensor['health']] ?? $sensor['health'],
             'last' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at']),
@@ -1411,4 +1413,22 @@ function render_full_map_page(array $user): void
     </body>
     </html>
     <?php
+}
+
+
+function render_map_feed(array $user): void
+{
+    $labels = sensor_health_labels();
+    $out = [];
+    foreach (list_sensors($user) as $sensor) {
+        $out[$sensor['code']] = [
+            'value' => (string) $sensor['last_value'],
+            'health' => $sensor['health'],
+            'label' => $labels[$sensor['health']] ?? $sensor['health'],
+            'last' => sensor_age_label($sensor['last_data_at'] === null ? null : (int) $sensor['last_data_at']),
+        ];
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode(['sensors' => $out], JSON_UNESCAPED_UNICODE);
 }

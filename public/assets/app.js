@@ -174,13 +174,34 @@ if (locationMap) {
         point.sensors.forEach((sensor) => {
             const row = document.createElement('div');
             row.className = 'map-popup-sensor';
+            row.dataset.sensor = sensor.code;
             const mark = document.createElement('i');
             mark.className = 'health-dot health-' + sensor.health;
-            const text = document.createElement('span');
-            text.textContent = sensor.name + ' · ' + sensor.parameter + ' — ' + sensor.label + ' (' + sensor.last + ')';
-            row.append(mark, text);
+            const info = document.createElement('a');
+            info.className = 'map-sensor-info';
+            info.href = '/?page=sensor-detail&code=' + encodeURIComponent(sensor.code);
+            info.target = '_blank';
+            info.rel = 'noopener';
+            const name = document.createElement('b');
+            name.textContent = sensor.name;
+            const meta = document.createElement('small');
+            meta.dataset.meta = '';
+            meta.textContent = sensor.parameter + ' · ' + sensor.label + ' (' + sensor.last + ')';
+            info.append(name, meta);
+            const value = document.createElement('strong');
+            value.className = 'map-sensor-value';
+            value.dataset.value = '';
+            value.textContent = sensor.value || '—';
+            row.append(mark, info, value);
             popup.appendChild(row);
         });
+        if (point.sensors.length) {
+            const live = document.createElement('p');
+            live.className = 'map-popup-live';
+            live.dataset.live = '';
+            live.textContent = 'Data realtime · diperbarui tiap 15 detik';
+            popup.appendChild(live);
+        }
         locationMap.appendChild(popup);
         const { w, h } = size();
         const position = project(point.lat, point.lng);
@@ -193,6 +214,27 @@ if (locationMap) {
         }
         render();
     }
+
+    const refreshPopup = async () => {
+        if (!popup || document.hidden) return;
+        try {
+            const response = await fetch('/?page=map-feed', { credentials: 'same-origin', cache: 'no-store' });
+            if (!response.ok) return;
+            const data = (await response.json()).sensors || {};
+            popup.querySelectorAll('[data-sensor]').forEach((row) => {
+                const item = data[row.dataset.sensor];
+                if (!item) return;
+                row.querySelector('.health-dot').className = 'health-dot health-' + item.health;
+                row.querySelector('[data-meta]').textContent = row.querySelector('[data-meta]').textContent.split(' · ')[0] + ' · ' + item.label + ' (' + item.last + ')';
+                row.querySelector('[data-value]').textContent = item.value || '—';
+            });
+            const live = popup.querySelector('[data-live]');
+            if (live) live.textContent = 'Data realtime · diperbarui ' + new Date().toLocaleTimeString('id-ID');
+        } catch (error) {
+            // jaringan terputus; coba lagi pada siklus berikutnya
+        }
+    };
+    setInterval(refreshPopup, 15000);
 
     const render = () => {
         const { w, h } = size();

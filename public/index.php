@@ -59,6 +59,7 @@ $allowedPages = [
     'sensor-label',
     'sensor-export',
     'map',
+    'map-feed',
     'api-river-feed',
     'river-monitor',
     'api-tide-feed',
@@ -241,6 +242,15 @@ if ($page === 'map') {
         redirect_to('/?page=login');
     }
     render_full_map_page($user);
+    exit;
+}
+if ($page === 'map-feed') {
+    if ($user === null || !user_has_permission($user, 'dashboard')) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        exit('{"error":"forbidden"}');
+    }
+    render_map_feed($user);
     exit;
 }
 if ($page === 'ews') {

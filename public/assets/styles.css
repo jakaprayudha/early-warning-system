@@ -991,3 +991,12 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 
 .map-controls .map-control-link{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid #d5dfdb;border-radius:7px;background:#fff;color:#314852;font:700 16px "Avenir Next",Avenir,sans-serif;text-decoration:none;box-shadow:0 2px 6px rgba(16,36,43,.15)}
 .map-controls .map-control-link:hover{background:#f1f8f5}
+
+.map-popup-sensor{align-items:center!important;gap:8px!important;padding:6px 0;border-top:1px solid #edf1ee}
+.map-popup-sensor .health-dot{margin-top:0!important;flex:none}
+.map-sensor-info{display:flex;flex-direction:column;min-width:0;flex:1;color:inherit;text-decoration:none}
+.map-sensor-info b{font-size:12px;line-height:1.25}
+.map-sensor-info small{color:#5b6b60;font-size:11px}
+.map-sensor-info:hover b{text-decoration:underline}
+.map-sensor-value{flex:none;font-size:14px;color:#1f5f3f;white-space:nowrap}
+.map-popup-live{margin:6px 0 0;font-size:11px;color:#5b6b60}
