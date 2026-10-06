@@ -299,3 +299,94 @@ function delete_sensor(array $user, int $sensorId, string $reason): void
         throw $error;
     }
 }
+
+
+function sensor_spec_fields(): array
+{
+    return [
+        'manufacturer' => ['Pabrikan', 100, 'text'],
+        'model' => ['Model / tipe', 100, 'text'],
+        'serial_number' => ['Nomor seri', 100, 'text'],
+        'range_min' => ['Rentang ukur minimum', 40, 'text'],
+        'range_max' => ['Rentang ukur maksimum', 40, 'text'],
+        'accuracy' => ['Akurasi', 60, 'text'],
+        'resolution' => ['Resolusi', 60, 'text'],
+        'sampling_rate' => ['Laju sampling', 60, 'text'],
+        'power_supply' => ['Catu daya', 100, 'text'],
+        'operating_temp' => ['Suhu operasi', 60, 'text'],
+        'ip_rating' => ['Proteksi (IP)', 20, 'text'],
+        'firmware' => ['Versi firmware', 60, 'text'],
+        'installed_on' => ['Tanggal pemasangan', 10, 'date'],
+        'last_calibrated_on' => ['Kalibrasi terakhir', 10, 'date'],
+        'next_calibration_on' => ['Kalibrasi berikutnya', 10, 'date'],
+    ];
+}
+
+function get_sensor_specs(array $sensorIds): array
+{
+    if ($sensorIds === []) {
+        return [];
+    }
+    $statement = db()->prepare(
+        'SELECT * FROM sensor_specs WHERE sensor_id IN (' . implode(',', array_fill(0, count($sensorIds), '?')) . ')'
+    );
+    $statement->execute(array_values($sensorIds));
+    $specs = [];
+    foreach ($statement->fetchAll() as $row) {
+        $specs[(int) $row['sensor_id']] = $row;
+    }
+
+    return $specs;
+}
+
+function parse_sensor_specs(array $post): array
+{
+    $data = [];
+    foreach (sensor_spec_fields() as $key => [$label, $max, $type]) {
+        $value = trim((string) ($post[$key] ?? ''));
+        if ($type === 'date') {
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+            if ($value !== '' && ($date === false || $date->format('Y-m-d') !== $value)) {
+                throw new InvalidArgumentException($label . ' tidak valid.');
+            }
+        } elseif ((int) preg_match_all('/./us', $value) > $max) {
+            throw new InvalidArgumentException($label . ' maksimal ' . $max . ' karakter.');
+        }
+        $data[$key] = $value;
+    }
+    $notes = trim((string) ($post['spec_notes'] ?? ''));
+    if ((int) preg_match_all('/./us', $notes) > 1000) {
+        throw new InvalidArgumentException('Catatan spesifikasi maksimal 1000 karakter.');
+    }
+    $data['notes'] = $notes;
+    if ($data['last_calibrated_on'] !== '' && $data['next_calibration_on'] !== ''
+        && $data['next_calibration_on'] < $data['last_calibrated_on']) {
+        throw new InvalidArgumentException('Kalibrasi berikutnya tidak boleh sebelum kalibrasi terakhir.');
+    }
+
+    return $data;
+}
+
+function save_sensor_specs(array $user, int $sensorId, array $data, string $reason): void
+{
+    $connection = db();
+    $connection->beginTransaction();
+    try {
+        $sensor = sensor_in_scope($user, $sensorId);
+        $columns = array_keys($data);
+        $connection->prepare(
+            'INSERT INTO sensor_specs (sensor_id, ' . implode(', ', $columns) . ', updated_by, updated_at)
+             VALUES (:sensor_id, :' . implode(', :', $columns) . ', :updated_by, :updated_at)
+             ON CONFLICT(sensor_id) DO UPDATE SET '
+            . implode(', ', array_map(static fn(string $c): string => $c . ' = excluded.' . $c, $columns))
+            . ', updated_by = excluded.updated_by, updated_at = excluded.updated_at'
+        )->execute($data + ['sensor_id' => $sensorId, 'updated_by' => $user['id'], 'updated_at' => time()]);
+        location_audit((int) $user['id'], 'sensor.specs_updated', ['sensor_id' => $sensorId, 'code' => $sensor['code']] + $data, $reason);
+        $connection->commit();
+    } catch (Throwable $error) {
+        if ($connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        throw $error;
+    }
+}

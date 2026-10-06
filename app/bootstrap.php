@@ -202,6 +202,29 @@ function db(): PDO
     );
     $connection->exec('CREATE INDEX IF NOT EXISTS sensors_location ON sensors(location_id)');
     $connection->exec(
+        'CREATE TABLE IF NOT EXISTS sensor_specs (
+            sensor_id INTEGER PRIMARY KEY REFERENCES sensors(id) ON DELETE CASCADE,
+            manufacturer TEXT NOT NULL DEFAULT "",
+            model TEXT NOT NULL DEFAULT "",
+            serial_number TEXT NOT NULL DEFAULT "",
+            range_min TEXT NOT NULL DEFAULT "",
+            range_max TEXT NOT NULL DEFAULT "",
+            accuracy TEXT NOT NULL DEFAULT "",
+            resolution TEXT NOT NULL DEFAULT "",
+            sampling_rate TEXT NOT NULL DEFAULT "",
+            power_supply TEXT NOT NULL DEFAULT "",
+            operating_temp TEXT NOT NULL DEFAULT "",
+            ip_rating TEXT NOT NULL DEFAULT "",
+            firmware TEXT NOT NULL DEFAULT "",
+            installed_on TEXT NOT NULL DEFAULT "",
+            last_calibrated_on TEXT NOT NULL DEFAULT "",
+            next_calibration_on TEXT NOT NULL DEFAULT "",
+            notes TEXT NOT NULL DEFAULT "",
+            updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            updated_at INTEGER NOT NULL
+        )'
+    );
+    $connection->exec(
         'CREATE TABLE IF NOT EXISTS integration_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,

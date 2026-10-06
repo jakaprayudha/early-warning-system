@@ -66,6 +66,7 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
         'location_id' => is_string($_GET['location_id'] ?? null) ? (int) $_GET['location_id'] : 0,
     ];
     $sensors = list_sensors($user, $filters);
+    $specs = get_sensor_specs(array_map(static fn(array $row): int => (int) $row['id'], $sensors));
     $all = $filters['q'] === '' && $filters['type'] === '' && $filters['health'] === '' && $filters['location_id'] === 0
         ? $sensors
         : list_sensors($user);
@@ -136,6 +137,29 @@ function render_sensors_page(array $user, ?string $message, ?string $error): voi
                             </div>
                             <span class="health-badge health-<?= e($sensor['health']) ?>"><?= e($labels[$sensor['health']]) ?></span>
                         </div>
+                        <?php $spec = $specs[$id] ?? null; ?>
+                        <details class="edit-details sensor-spec">
+                            <summary>Spesifikasi<?= $spec === null ? ' (belum diisi)' : '' ?></summary>
+                            <?php if ($spec !== null): ?>
+                                <dl class="spec-list">
+                                    <?php foreach (sensor_spec_fields() as $key => [$label]): if ($spec[$key] !== ''): ?>
+                                        <div><dt><?= e($label) ?></dt><dd><?= e($spec[$key]) ?></dd></div>
+                                    <?php endif; endforeach; ?>
+                                    <?php if ($spec['notes'] !== ''): ?><div class="spec-notes"><dt>Catatan</dt><dd><?= e($spec['notes']) ?></dd></div><?php endif; ?>
+                                </dl>
+                            <?php endif; ?>
+                            <form class="hazard-form" method="post" action="<?= $action ?>">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="action" value="save_sensor_specs">
+                                <input type="hidden" name="sensor_id" value="<?= $id ?>">
+                                <?php foreach (sensor_spec_fields() as $key => [$label, $max, $type]): ?>
+                                    <label><?= e($label) ?><input name="<?= e($key) ?>" type="<?= e($type) ?>" <?= $type === 'text' ? 'maxlength="' . (int) $max . '"' : '' ?> value="<?= e((string) ($spec[$key] ?? '')) ?>"></label>
+                                <?php endforeach; ?>
+                                <label class="hazard-description">Catatan spesifikasi<textarea name="spec_notes" maxlength="1000" rows="3"><?= e((string) ($spec['notes'] ?? '')) ?></textarea></label>
+                                <label class="hazard-reason">Alasan perubahan<input name="reason" maxlength="500" required placeholder="Wajib diisi untuk audit"></label>
+                                <button class="save-button" type="submit">Simpan spesifikasi</button>
+                            </form>
+                        </details>
                         <details class="edit-details">
                             <summary>Ubah sensor</summary>
                             <form id="sensor-update-<?= $id ?>" class="hazard-form" method="post" action="<?= $action ?>">

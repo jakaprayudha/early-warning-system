@@ -457,6 +457,9 @@ if ($page === 'dashboard'
             }
             save_sensor($user, $action, $data, $reason);
             flash('message', $action === 'create_sensor' ? 'Sensor berhasil ditambahkan.' : 'Sensor berhasil diperbarui.');
+        } elseif ($action === 'save_sensor_specs') {
+            save_sensor_specs($user, $sensorId, parse_sensor_specs($_POST), $reason);
+            flash('message', 'Spesifikasi sensor disimpan.');
         } elseif ($action === 'record_sensor') {
             record_sensor_heartbeat($user, $sensorId, trim(post_value('value')), $reason);
             flash('message', 'Data terakhir sensor dicatat.');

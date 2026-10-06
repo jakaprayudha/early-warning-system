@@ -919,3 +919,8 @@ i.health-dot.health-inactive, i.health-dot.health-none { background: #94a3b8; }
 .chip-ews { background: #e3f2ee; color: #1d6b58; }
 
 .danger-button { background: #b3261e; border-color: #b3261e; }
+
+.spec-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 16px; margin: 0 0 14px; }
+.spec-list dt { font-size: 12px; color: #5c746c; }
+.spec-list dd { margin: 2px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.spec-list .spec-notes { grid-column: 1 / -1; }
