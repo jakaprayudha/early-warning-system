@@ -92,54 +92,315 @@ function weather_dummy_history(string $code): array
     return $rows;
 }
 
-// Bila APP_WEATHER_FEED_URL diatur, JSON dibaca dari sumber asli (skema sama); gagal => kembali ke simulasi.
-function weather_fetch_feed(array $codes): array
-{
-    $url = (string) (getenv('APP_WEATHER_FEED_URL') ?: '');
-    if ($url !== '' && preg_match('#^https?://#i', $url) === 1) {
-        $context = stream_context_create(['http' => ['timeout' => 5, 'ignore_errors' => false]]);
-        $raw = @file_get_contents($url, false, $context);
-        $data = is_string($raw) ? json_decode($raw, true) : null;
-        if (is_array($data) && is_array($data['stations'] ?? null)) {
-            $data['stations'] = array_values(array_filter(
-                $data['stations'],
-                static fn(mixed $row): bool => is_array($row) && in_array($row['code'] ?? null, $codes, true)
-            ));
-            $data['source'] = 'live';
-            $data['generated_at'] ??= gmdate('c');
 
-            return $data;
+function weather_sensor_today(string $ewsId, string $today): array
+{
+    $token = getenv('EWS_API_TOKEN');
+
+    if (!is_string($token) || $token === '') {
+        throw new RuntimeException('EWS_API_TOKEN belum diatur');
+    }
+
+    $url = getenv('EWS_SENSOR_API_URL')
+        ?: 'http://72.62.124.177:3200/api/getAllDataSensor';
+
+    $ch = curl_init($url);
+
+    if ($ch === false) {
+        throw new RuntimeException('Gagal menyiapkan cURL');
+    }
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode([
+            'EWSid' => $ewsId,
+            'token' => $token
+        ], JSON_THROW_ON_ERROR),
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Accept: application/json'
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 20,
+    ]);
+
+    $raw = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+
+    unset($ch); // Tidak perlu curl_close() pada PHP 8.5
+
+    if (!is_string($raw)) {
+        throw new RuntimeException('Sensor API gagal: ' . $error);
+    }
+
+    if ($status !== 200) {
+        throw new RuntimeException('Sensor API HTTP ' . $status);
+    }
+
+    $payload = json_decode(
+        $raw,
+        true,
+        512,
+        JSON_THROW_ON_ERROR
+    );
+
+    if (
+        !is_array($payload) ||
+        ($payload['success'] ?? false) !== true ||
+        !is_array($payload['data'] ?? null)
+    ) {
+        throw new RuntimeException(
+            'Format respons sensor tidak sesuai'
+        );
+    }
+
+    $number = static function (mixed $value): ?float {
+        if (
+            $value === null ||
+            $value === '' ||
+            !is_numeric($value)
+        ) {
+            return null;
+        }
+
+        $n = (float) $value;
+        return is_finite($n) ? $n : null;
+    };
+
+    $tz = new DateTimeZone('Asia/Jakarta');
+    $rows = [];
+
+    foreach ($payload['data'] as $item) {
+        if (
+            !is_array($item) ||
+            (string) ($item['ews_id'] ?? '') !== $ewsId ||
+            ($item['tanggal'] ?? '') !== $today
+        ) {
+            continue;
+        }
+
+        $time = $item['waktu'] ?? null;
+
+        if (
+            !is_string($time) ||
+            !preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)
+        ) {
+            continue;
+        }
+
+        $dateTime = DateTimeImmutable::createFromFormat(
+            '!Y-m-d H:i:s',
+            "$today $time",
+            $tz
+        );
+
+        if (
+            !$dateTime ||
+            $dateTime->format('Y-m-d H:i:s') !== "$today $time"
+        ) {
+            continue;
+        }
+
+        $rows[] = [
+            'id' => isset($item['id'])
+                ? (int) $item['id']
+                : null,
+
+            'code' => $ewsId,
+            'ews_id' => $ewsId,
+            'tanggal' => $today,
+            'waktu' => $time,
+            'observed_at' => $dateTime->format(DATE_ATOM),
+
+            // Nilai mentah curah_hujan diasumsikan akumulasi mm.
+            'rain_total_mm' => $number(
+                $item['curah_hujan'] ?? null
+            ),
+
+            // Dihitung setelah data diurutkan.
+            'rain_mm_h' => null,
+
+            'temperature_c' => $number(
+                $item['suhu'] ?? null
+            ),
+
+            'humidity_pct' => $number(
+                $item['kelembapan'] ?? null
+            ),
+
+            'wind_kmh' => $number(
+                $item['kecepatan_angin'] ?? null
+            ),
+
+            'wind_deg' => $number(
+                $item['derajat_angin'] ?? null
+            ),
+
+            'wind_direction' => is_string(
+                $item['arah_angin'] ?? null
+            ) ? trim($item['arah_angin']) : null,
+
+            'pressure_hpa' => $number(
+                $item['tekanan'] ?? null
+            ),
+
+            '_ts' => $dateTime->getTimestamp(),
+        ];
+    }
+
+    // Urutkan dari waktu terlama ke terbaru.
+    usort($rows, static fn(array $a, array $b): int =>
+        ($a['_ts'] <=> $b['_ts'])
+        ?: (($a['id'] ?? 0) <=> ($b['id'] ?? 0))
+    );
+
+    $prevTotal = null;
+    $prevTime = null;
+
+    foreach ($rows as &$row) {
+        $total = $row['rain_total_mm'];
+
+        if (
+            $total !== null &&
+            $prevTotal !== null &&
+            $prevTime !== null
+        ) {
+            $elapsed = $row['_ts'] - $prevTime;
+
+            // Hanya hitung pada interval valid <= 15 menit.
+            // Jika penghitung di-reset, hasil dibiarkan null.
+            if (
+                $elapsed > 0 &&
+                $elapsed <= 900 &&
+                $total >= $prevTotal
+            ) {
+                $row['rain_mm_h'] = round(
+                    ($total - $prevTotal) * 3600 / $elapsed,
+                    2
+                );
+            }
+        }
+
+        $prevTotal = $total;
+        $prevTime = $row['_ts'];
+
+        unset($row['_ts']);
+    }
+
+    unset($row);
+
+    return $rows;
+}
+
+
+// GANTI fungsi weather_fetch_feed() lama.
+// Parameter kedua tetap opsional.
+function weather_fetch_feed(
+    array $codes,
+    bool $history = false
+): array {
+    $now = new DateTimeImmutable(
+        'now',
+        new DateTimeZone('Asia/Jakarta')
+    );
+
+    $today = $now->format('Y-m-d');
+
+    $feed = [
+        'source' => 'live',
+        'date' => $today,
+        'generated_at' => $now->format(DATE_ATOM),
+        'refresh_seconds' => 300,
+        'stations' => [],
+        'data' => [],
+        'latest' => null,
+    ];
+
+    foreach ($codes as $code) {
+        $list = weather_sensor_today((string) $code, $today);
+
+        $last = $list === []
+            ? null
+            : $list[count($list) - 1];
+
+        // stations tetap ARRAY agar dashboard lama kompatibel.
+        $feed['stations'][] = [
+            'code' => (string) $code
+        ] + ($last ?? []);
+
+        if ($history) {
+            array_push($feed['data'], ...$list);
+        }
+
+        if (count($codes) === 1) {
+            $feed['latest'] = $last;
         }
     }
 
-    return weather_dummy_feed($codes);
+    if ($history && count($codes) === 1) {
+        $feed['history'] = $feed['data'];
+    }
+
+    return $feed;
 }
 
-function handle_weather_feed(array $user): never
-{
+
+function handle_weather_feed(array $user): never{
     header('Content-Type: application/json; charset=utf-8');
-    if (!user_has_permission($user, 'dashboard') && $user['role'] !== 'system_admin') {
+    header('Cache-Control: no-store');
+
+    if (
+        ($user['role'] ?? '') !== 'system_admin' &&
+        !user_has_permission($user, 'dashboard')
+    ) {
         http_response_code(403);
-        echo '{"error":"forbidden"}';
-        exit;
+        exit('{"error":"forbidden"}');
     }
-    $codes = array_map(static fn(array $s): string => (string) $s['code'], weather_stations($user));
+
+    $codes = array_map(
+        static fn(array $s): string => (string) $s['code'],
+        weather_stations($user)
+    );
+
     $only = $_GET['code'] ?? null;
-    if (is_string($only)) {
+
+    if ($only !== null && !is_string($only)) {
+        http_response_code(400);
+        exit('{"error":"invalid_code"}');
+    }
+
+    if ($only !== null) {
         if (!in_array($only, $codes, true)) {
             http_response_code(404);
-            echo '{"error":"not_found"}';
-            exit;
+            exit('{"error":"not_found"}');
         }
+
         $codes = [$only];
     }
-    $feed = weather_fetch_feed($codes);
-    if (is_string($only) && ($_GET['history'] ?? '') === '1') {
-        $feed['history'] = $feed['source'] === 'dummy' ? weather_dummy_history($only) : [];
+
+    try {
+        $feed = weather_fetch_feed(
+            $codes,
+            $only !== null &&
+            ($_GET['history'] ?? '') === '1'
+        );
+
+        echo json_encode(
+            $feed,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+        );
+    } catch (Throwable $e) {
+        error_log('[WEATHER FEED] ' . $e->getMessage());
+
+        http_response_code(502);
+        echo '{"error":"sensor_api_unavailable"}';
     }
-    echo json_encode($feed, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+
     exit;
 }
+
 
 function weather_find_station(array $user, string $code): ?array
 {
