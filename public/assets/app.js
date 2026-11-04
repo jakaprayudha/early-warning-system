@@ -440,65 +440,178 @@ if (locationMap) {
     setInterval(refresh, 15000);
 })();
 
+
 (() => {
     const page = document.querySelector('[data-river-page]');
     if (!page) return;
-    const levels = JSON.parse(page.dataset.levels || '{}');
-    const fmt = (value) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-    const levelOf = (cm, thresholds) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-        const t = thresholds[key];
-        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
-    }, 'normal');
-    const trends = { rising: ['▲ Naik', 'rising'], falling: ['▼ Turun', 'falling'], steady: ['■ Stabil', 'steady'] };
     const source = page.querySelector('[data-river-source]');
-    const set = (card, field, text) => { const node = card.querySelector('[data-field="' + field + '"]'); if (node) node.textContent = text; };
-    const stat = (name, value) => { const node = page.querySelector('[data-river-' + name + ']'); if (node) node.textContent = value; };
-
-    const refresh = async () => {
-        try {
-            const response = await fetch(page.dataset.feedUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('feed');
-            const data = await response.json();
-            let alerting = 0; let rising = 0; let max = 0;
-            data.stations.forEach((row) => {
-                const card = page.querySelector('[data-river-station="' + CSS.escape(row.code) + '"]');
-                if (!card) return;
-                const thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-                const cm = Number(row.water_level_cm);
-                const change = Number(row.change_1h_cm);
-                const level = levelOf(cm, thresholds);
-                const trend = change >= 2 ? 'rising' : (change <= -2 ? 'falling' : 'steady');
-                max = Math.max(max, cm);
-                if (level !== 'normal') alerting += 1;
-                if (trend === 'rising') rising += 1;
-                set(card, 'level_cm', fmt(cm));
-                set(card, 'change', (change > 0 ? '+' : '') + fmt(change));
-                set(card, 'rain', fmt(row.rain_upstream_mm_h));
-                set(card, 'flow', fmt(row.flow_m3s));
-                set(card, 'time', clock(row.observed_at));
-                set(card, 'trend', trends[trend][0]);
-                card.querySelector('[data-field="trend"]').className = 'river-trend trend-' + trend;
-                const badge = card.querySelector('[data-field="level"]');
-                badge.textContent = levels[level];
-                badge.className = 'weather-level river-' + level;
-                const top = Math.max(300, ...Object.values(thresholds).map((t) => t.value * 1.25));
-                const pct = Math.min(100, Math.round(cm / top * 100 / 5) * 5);
-                card.querySelector('[data-field="gauge"]').className = 'river-fill river-' + level + ' bar-w-' + pct;
+    const num = v =>
+        v === null || v === undefined || v === '' ||
+        !Number.isFinite(Number(v))
+            ? null : Number(v);
+    const fmt = v =>
+        num(v) === null
+            ? '—'
+            : Number(v).toLocaleString('id-ID', {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1
             });
+    const trendLabels = {
+        NAIK: '▲ Naik',
+        TURUN: '▼ Turun',
+        STABIL: '■ Stabil'
+    };
+    const labels = {
+        normal: 'Normal',
+        watch: 'Waspada',
+        alert: 'Siaga',
+        warning: 'Awas'
+    };
+    const set = (card, field, value) => {
+        const el = card.querySelector(`[data-field="${field}"]`);
+        if (el) el.textContent = value;
+    };
+    const stat = (name, value) => {
+        const el = page.querySelector(`[data-river-${name}]`);
+        if (el) el.textContent = value;
+    };
+    function rulesValid(rules) {
+        const w = num(rules.watch?.value);
+        const a = num(rules.alert?.value);
+        const d = num(rules.warning?.value);
+        return w !== null && a !== null && d !== null &&
+            w < a && a < d;
+    }
+    function levelOf(cm, rules) {
+        if (!rulesValid(rules)) return null;
+        let level = 'normal';
+        for (const key of ['watch', 'alert', 'warning']) {
+            const t = rules[key];
+            if (t.op === '>'
+                ? cm > t.value
+                : cm >= t.value
+            ) {
+                level = key;
+            }
+        }
+        return level;
+    }
+    async function refresh() {
+        try {
+            const response = await fetch(page.dataset.feedUrl, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: { Accept: 'application/json' }
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const feed = await response.json();
+            if (!Array.isArray(feed.stations)) {
+                throw new Error('stations harus array');
+            }
+            let alerting = 0;
+            let rising = 0;
+            let max = null;
+            for (const row of feed.stations) {
+                const card = [
+                    ...page.querySelectorAll('[data-river-station]')
+                ].find(
+                    el => el.dataset.riverStation === row.code
+                );
+                if (!card) continue;
+                const cm = num(row.water_level_cm);
+                const time = Date.parse(row.observed_at || '');
+                const age = Date.now() - time;
+                const fresh =
+                    Number.isFinite(age) &&
+                    age >= -60000 &&
+                    age <= 15 * 60000;
+                const rules = feed.thresholds?.[row.code] || {};
+                const level = cm !== null && fresh
+                    ? levelOf(cm, rules)
+                    : null;
+                const label = cm === null
+                    ? 'DATA TIDAK TERSEDIA'
+                    : !fresh
+                        ? 'DATA TERLAMBAT'
+                        : level === null
+                            ? 'AMBANG BELUM DIATUR'
+                            : labels[level];
+                if (level && level !== 'normal') alerting++;
+                if (fresh && row.trend === 'NAIK') rising++;
+                if (cm !== null) {
+                    max = Math.max(max ?? cm, cm);
+                }
+                set(card, 'level_cm', fmt(cm));
+                set(card, 'distance', fmt(row.sensor_distance_cm));
+                set(card, 'change', fmt(row.change_1h_cm));
+                set(card, 'trend', trendLabels[row.trend] || '—');
+                set(
+                    card,
+                    'time',
+                    row.observed_at
+                        ? row.observed_at.slice(11, 19) + ' WIB'
+                        : '—'
+                );
+                const badge = card.querySelector('[data-field="level"]');
+                if (badge) {
+                    badge.textContent = label;
+                    badge.className = 'weather-level' +
+                        (level ? ` river-${level}` : '');
+                }
+                const top = Math.max(
+                    300,
+                    ...Object.values(rules).map(
+                        t => num(t.value) ?? 0
+                    )
+                ) * 1.25;
+                const pct = cm === null
+                    ? 0
+                    : Math.max(
+                        0,
+                        Math.min(100, Math.round(cm / top * 20) * 5)
+                    );
+                const gauge = card.querySelector('[data-field="gauge"]');
+                if (gauge) {
+                    gauge.className = 'river-fill' +
+                        (level ? ` river-${level}` : '') +
+                        ` bar-w-${pct}`;
+                }
+            }
             stat('alerting', String(alerting));
             stat('rising', String(rising));
             stat('max', fmt(max));
-            stat('updated', clock(data.generated_at));
-            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
-        } catch (error) {
-            source.className = 'weather-source error';
-            source.lastChild.textContent = 'Gagal memuat data';
+            stat('updated', new Intl.DateTimeFormat('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date()));
+            if (source) {
+                source.className = 'weather-source live';
+                source.textContent = 'Sumber: API sensor';
+            }
+        } catch (err) {
+            console.error('[RIVER DASHBOARD]', err);
+            if (source) {
+                source.className = 'weather-source error';
+                source.textContent = 'Gagal mengambil data API';
+            }
+            page.querySelectorAll('[data-river-station]').forEach(card => {
+                const badge = card.querySelector('[data-field="level"]');
+                if (badge) {
+                    badge.textContent = 'KONEKSI BERMASALAH';
+                    badge.className = 'weather-level';
+                }
+            });
         }
-    };
-    setInterval(refresh, 15000);
+    }
+    refresh();
+    setInterval(refresh, 300000);
 })();
+
 
 (() => {
     const page = document.querySelector('[data-tide-page]');
@@ -620,6 +733,7 @@ if (locationMap) {
     setInterval(refresh, 15000);
 })();
 
+// cuaca
 (() => {
     const page = document.querySelector('[data-weather-monitor]');
     if (!page) return;
@@ -732,262 +846,833 @@ if (locationMap) {
     setInterval(refresh, 5000);
 })();
 
+// Sungai
+
 (() => {
     const page = document.querySelector('[data-river-monitor]');
     if (!page) return;
-    const levels = JSON.parse(page.dataset.levels || '{}');
-    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-    const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
-    const trends = { rising: '▲ Naik', falling: '▼ Turun', steady: '■ Stabil' };
-    const MAX_POINTS = 120;
-    let series = [];
-    let thresholds = {};
+
+    const feedUrl = page.dataset.feedUrl;
+
+    if (!feedUrl) {
+        console.error('[RIVER] data-feed-url belum ada');
+        return;
+    }
+
     const source = page.querySelector('[data-monitor-source]');
-    const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-        const t = thresholds[key];
-        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
-    }, 'normal');
+    const badge = page.querySelector('[data-monitor-level]');
+    const tbody = page.querySelector('[data-monitor-rows]');
+    const count = page.querySelector('[data-monitor-count]');
+    const dateLabel = page.querySelector('[data-monitor-date]');
+    const pageInfo = page.querySelector('[data-page-info]');
+    const numbers = page.querySelector('[data-page-numbers]');
+    const prev = page.querySelector('[data-page-prev]');
+    const next = page.querySelector('[data-page-next]');
+    const clock = page.querySelector('[data-monitor-clock]');
 
-    const draw = (canvas) => {
-        const key = canvas.dataset.chart;
-        const digits = Number(canvas.dataset.digits);
-        const color = canvas.dataset.color;
-        const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
-        const ratio = window.devicePixelRatio || 1;
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-        if (!width || !height) return;
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(ratio, ratio);
-        ctx.clearRect(0, 0, width, height);
-        const pad = { l: 46, r: 12, t: 10, b: 22 };
-        const values = series.map((row) => Number(row[key]));
-        if (values.length < 2) return;
-        let min = Math.min(...values, ...lines.map(([, t]) => t.value));
-        let max = Math.max(...values, ...lines.map(([, t]) => t.value));
-        if (max - min < 1e-6) { max += 1; min -= 1; }
-        const span = max - min;
-        min -= span * 0.08;
-        max += span * 0.08;
-        const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
-        const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.fillStyle = '#75858a';
-        ctx.strokeStyle = '#e4ebe8';
-        ctx.lineWidth = 1;
-        for (let g = 0; g <= 4; g += 1) {
-            const v = min + (max - min) * g / 4;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
-            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-            ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
-        }
-        ctx.textBaseline = 'alphabetic';
-        [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
-            ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
-            ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
-        });
-        lines.forEach(([sev, t]) => {
-            ctx.save();
-            ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
-            ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
-            ctx.fillText(levels[sev] + ' ' + fmt(t.value, 0), width - pad.r - 2, y(t.value) - 3);
-            ctx.restore();
-        });
-        ctx.beginPath();
-        values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
-        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-        ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
+    const canvases = [
+        ...page.querySelectorAll('canvas[data-chart]')
+    ];
+
+    const hover = new WeakMap();
+    const PAGE_SIZE = 10;
+
+    const colors = {
+        watch: '#d9822b',
+        alert: '#c8541a',
+        warning: '#b53a31'
     };
 
-    const render = () => {
-        page.querySelectorAll('canvas[data-chart]').forEach(draw);
-        const last = series[series.length - 1];
-        if (!last) return;
-        const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
-        now('water_level_cm', fmt(last.water_level_cm));
-        now('change_1h_cm', (last.change_1h_cm > 0 ? '+' : '') + fmt(last.change_1h_cm));
-        now('rain_upstream_mm_h', fmt(last.rain_upstream_mm_h));
-        now('flow_m3s', fmt(last.flow_m3s));
-        now('observed_at', clock(last.observed_at));
-        const change = Number(last.change_1h_cm);
-        const trend = change >= 2 ? 'rising' : (change <= -2 ? 'falling' : 'steady');
-        now('trend', trends[trend]);
-        page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
-        const level = levelOf(Number(last.water_level_cm));
-        const badge = page.querySelector('[data-monitor-level]');
-        badge.textContent = levels[level];
-        badge.className = 'weather-level river-' + level;
-        const body = page.querySelector('[data-monitor-rows]');
-        body.replaceChildren(...series.slice(-12).reverse().map((row) => {
-            const tr = document.createElement('tr');
-            [clock(row.observed_at), fmt(row.water_level_cm), (row.change_1h_cm > 0 ? '+' : '') + fmt(row.change_1h_cm), fmt(row.rain_upstream_mm_h), fmt(row.flow_m3s)].forEach((text) => {
-                const td = document.createElement('td'); td.textContent = text; tr.append(td);
+    const labels = {
+        normal: 'NORMAL',
+        watch: 'WASPADA',
+        alert: 'SIAGA',
+        warning: 'AWAS'
+    };
+
+    const trendLabels = {
+        NAIK: '▲ Naik',
+        TURUN: '▼ Turun',
+        STABIL: '■ Stabil'
+    };
+
+    let rows = [];
+    let thresholds = {};
+    let activePage = 1;
+    let activeDate = '';
+    let loading = false;
+    let fresh = false;
+    let raf = null;
+    let lastFrame = 0;
+
+    const reducedMotion =
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        ?? false;
+
+    function num(v) {
+        if (v === null || v === undefined || v === '') {
+            return null;
+        }
+
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function fmt(v, digits = 1) {
+        return num(v) === null
+            ? '—'
+            : Number(v).toLocaleString('id-ID', {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
             });
-            return tr;
-        }));
-    };
+    }
 
-    let first = true;
-    const refresh = async () => {
-        try {
-            const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('feed');
-            const data = await response.json();
-            if (first && Array.isArray(data.history)) series = data.history.slice();
-            first = false;
-            const row = data.stations[0];
-            if (row) {
-                thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-                if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
+    function seconds(s) {
+        const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(s || '');
+        if (!m) return null;
+
+        const [h, min, sec] = m.slice(1).map(Number);
+
+        return h < 24 && min < 60 && sec < 60
+            ? h * 3600 + min * 60 + sec
+            : null;
+    }
+
+    function setNow(key, text) {
+        const el = page.querySelector(`[data-now="${key}"]`);
+        if (el) el.textContent = text;
+    }
+
+    function setSource(text, kind = 'dummy') {
+        if (!source) return;
+
+        source.className = `weather-source ${kind}`;
+        source.textContent = text;
+    }
+
+    // Normalisasi data sungai ke sentimeter.
+    function normalize(r) {
+        const height =
+            num(r.water_level_cm) ??
+            (num(r.tinggi_air) === null
+                ? null : num(r.tinggi_air) / 10) ??
+            (num(r.tide_level_m) === null
+                ? null : num(r.tide_level_m) * 100);
+
+        const distance =
+            num(r.sensor_distance_cm) ??
+            (num(r.water_level) === null
+                ? null : num(r.water_level) / 10) ??
+            (num(r.sensor_distance_m) === null
+                ? null : num(r.sensor_distance_m) * 100);
+
+        const change =
+            num(r.change_1h_cm) ??
+            (num(r.change_1h_m) === null
+                ? null : num(r.change_1h_m) * 100);
+
+        const waktu = r.waktu ||
+            (r.observed_at || '').slice(11, 19);
+
+        return {
+            id: r.id ?? null,
+            tanggal: r.tanggal,
+            waktu,
+
+            observed_at: r.observed_at ||
+                `${r.tanggal}T${waktu}+07:00`,
+
+            water_level_cm: height,
+            sensor_distance_cm: distance,
+            change_1h_cm: change,
+
+            trend: r.trend || 'TIDAK_ADA_DATA'
+        };
+    }
+
+    // Ambang sungai sudah menggunakan cm.
+    function getRules(feed) {
+        const code = new URL(
+            feedUrl,
+            location.href
+        ).searchParams.get('code');
+
+        const raw = feed.thresholds?.[code] || {};
+        const result = {};
+
+        for (const k of ['watch', 'alert', 'warning']) {
+            const value = num(raw[k]?.value);
+
+            if (value !== null) {
+                result[k] = {
+                    value,
+                    op: raw[k].op === '>' ? '>' : '>='
+                };
             }
-            series = series.slice(-MAX_POINTS);
-            page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
-            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+        }
+
+        return result;
+    }
+
+    function levelOf(height) {
+        if (height === null) return null;
+
+        const w = thresholds.watch?.value;
+        const a = thresholds.alert?.value;
+        const d = thresholds.warning?.value;
+
+        if (
+            ![w, a, d].every(Number.isFinite) ||
+            !(w < a && a < d)
+        ) {
+            return 'unconfigured';
+        }
+
+        let level = 'normal';
+
+        for (const k of ['watch', 'alert', 'warning']) {
+            const t = thresholds[k];
+
+            if (
+                t.op === '>'
+                    ? height > t.value
+                    : height >= t.value
+            ) {
+                level = k;
+            }
+        }
+
+        return level;
+    }
+
+    // Menggambar grafik berdasarkan waktu WIB dalam sehari.
+    function draw(canvas, tick = performance.now()) {
+        const key = canvas.dataset.chart;
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight || 260;
+
+        if (!width || !height) return;
+
+        const ratio = Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+        const pixelW = Math.round(width * ratio);
+        const pixelH = Math.round(height * ratio);
+
+        if (
+            canvas.width !== pixelW ||
+            canvas.height !== pixelH
+        ) {
+            canvas.width = pixelW;
+            canvas.height = pixelH;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        const left = 52;
+        const right = 16;
+        const top = 18;
+        const bottom = 32;
+
+        const plotW = width - left - right;
+        const plotH = height - top - bottom;
+
+        if (plotW <= 0 || plotH <= 0) return;
+
+        const points = rows
+            .map(r => ({
+                t: seconds(r.waktu),
+                v: num(r[key])
+            }))
+            .filter(p => p.t !== null && p.v !== null);
+
+        const lines = key === 'water_level_cm'
+            ? Object.entries(thresholds)
+            : [];
+
+        const values = [
+            ...points.map(p => p.v),
+            ...lines.map(([, t]) => t.value)
+        ];
+
+        if (!values.length) return;
+
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+
+        if (max - min < 0.01) {
+            min -= 5;
+            max += 5;
+        }
+
+        const margin = (max - min) * 0.1;
+
+        min -= margin;
+        max += margin;
+
+        const x = t => left + t / 86400 * plotW;
+
+        const y = v =>
+            top + (1 - (v - min) / (max - min)) * plotH;
+
+        ctx.font = '11px system-ui, sans-serif';
+
+        // Garis bantu horizontal dan nilai cm.
+        for (let i = 0; i <= 4; i++) {
+            const v = min + (max - min) * i / 4;
+
+            ctx.strokeStyle = '#e4ebe8';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            ctx.moveTo(left, y(v));
+            ctx.lineTo(width - right, y(v));
+            ctx.stroke();
+
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#75858a';
+
+            ctx.fillText(fmt(v), left - 6, y(v));
+        }
+
+        // Sumbu waktu 24 jam.
+        [
+            [0, '00:00'],
+            [21600, '06:00'],
+            [43200, '12:00'],
+            [64800, '18:00'],
+            [86400, '24:00']
+        ].forEach(([t, label]) => {
+            ctx.textBaseline = 'alphabetic';
+
+            ctx.textAlign = t === 0
+                ? 'left'
+                : t === 86400
+                    ? 'right'
+                    : 'center';
+
+            ctx.fillText(label, x(t), height - 8);
+        });
+
+        // Garis ambang jika tersedia.
+        for (const [sev, rule] of lines) {
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+
+            ctx.strokeStyle = colors[sev] || '#999';
+
+            ctx.beginPath();
+            ctx.moveTo(left, y(rule.value));
+            ctx.lineTo(width - right, y(rule.value));
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        if (!points.length) return;
+
+        const color = canvas.dataset.color || '#2f80c9';
+
+        // Garis data. Putus jika jeda lebih dari 15 menit.
+        ctx.beginPath();
+
+        points.forEach((p, i) => {
+            if (
+                i === 0 ||
+                p.t - points[i - 1].t > 900
+            ) {
+                ctx.moveTo(x(p.t), y(p.v));
+            } else {
+                ctx.lineTo(x(p.t), y(p.v));
+            }
+        });
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Titik pengukuran terbaru.
+        const last = points[points.length - 1];
+
+        const lx = x(last.t);
+        const ly = y(last.v);
+
+        // Ripple lembut: 5 detik per putaran.
+        // Tidak dianimasikan untuk data yang sudah terlambat.
+        if (fresh && !reducedMotion) {
+            const phase = (tick % 5000) / 5000;
+
+            [phase, (phase + 0.5) % 1].forEach((p, i) => {
+                ctx.save();
+
+                ctx.globalAlpha =
+                    (i === 0 ? 0.55 : 0.40) * (1 - p);
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = i === 0 ? 3.5 : 3;
+
+                ctx.beginPath();
+                ctx.arc(
+                    lx, ly,
+                    5 + 18 * p,
+                    0, Math.PI * 2
+                );
+                ctx.stroke();
+
+                ctx.restore();
+            });
+        }
+
+        ctx.beginPath();
+        ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(lx, ly, 1.7, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        // Tooltip ketika mouse berada dekat garis.
+        const cursor = hover.get(canvas);
+        if (!cursor) return;
+
+        let nearest = null;
+        let minDist = 28 * 28;
+
+        for (const p of points) {
+            const dist =
+                (x(p.t) - cursor.x) ** 2 +
+                (y(p.v) - cursor.y) ** 2;
+
+            if (dist < minDist) {
+                nearest = p;
+                minDist = dist;
+            }
+        }
+
+        if (!nearest) return;
+
+        const px = x(nearest.t);
+        const py = y(nearest.v);
+
+        const hh = String(
+            Math.floor(nearest.t / 3600)
+        ).padStart(2, '0');
+
+        const mm = String(
+            Math.floor(nearest.t % 3600 / 60)
+        ).padStart(2, '0');
+
+        const ss = String(
+            nearest.t % 60
+        ).padStart(2, '0');
+
+        const title = ({
+            water_level_cm: 'Tinggi muka air',
+            sensor_distance_cm: 'Jarak radar',
+            change_1h_cm: 'Perubahan 1 jam'
+        })[key] || 'Pengukuran';
+
+        const timeText = `${hh}:${mm}:${ss} WIB`;
+        const valueText = `${fmt(nearest.v)} cm`;
+
+        ctx.save();
+
+        // Garis vertikal menuju waktu pengukuran.
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = '#84969e';
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(px, top);
+        ctx.lineTo(px, height - bottom);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+
+        // Lingkaran titik yang sedang dipilih.
+        ctx.beginPath();
+        ctx.arc(px, py, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+
+        // Kotak tooltip.
+        ctx.font = '12px system-ui, sans-serif';
+
+        const boxW = Math.min(
+            width - 16,
+            Math.max(
+                160,
+                ctx.measureText(title).width + 24
+            )
+        );
+
+        const boxH = 82;
+
+        const bx = Math.max(
+            8,
+            Math.min(px + 14, width - boxW - 8)
+        );
+
+        const by = Math.max(
+            8,
+            Math.min(
+                py - boxH - 12 < 8
+                    ? py + 12
+                    : py - boxH - 12,
+                height - boxH - 8
+            )
+        );
+
+        ctx.fillStyle = 'rgba(20,43,56,.96)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxW, boxH, 8);
+        ctx.fill();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.fillText(title, bx + 12, by + 18);
+
+        ctx.font = '12px system-ui, sans-serif';
+        ctx.fillText(timeText, bx + 12, by + 42);
+
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.fillText(valueText, bx + 12, by + 64);
+
+        ctx.restore();
+    }
+
+    function drawAll(t) {
+        canvases.forEach(c => draw(c, t));
+    }
+
+    // Animasi maksimal sekitar 20 FPS untuk meringankan CPU.
+    function animate(t) {
+        if (!document.hidden && t - lastFrame >= 50) {
+            lastFrame = t;
+            drawAll(t);
+        }
+
+        raf = requestAnimationFrame(animate);
+    }
+
+    function startAnimation() {
+        if (raf === null && !reducedMotion && !document.hidden) {
+            raf = requestAnimationFrame(animate);
+        } else if (reducedMotion) {
+            drawAll();
+        }
+    }
+
+    function stopAnimation() {
+        if (raf !== null) {
+            cancelAnimationFrame(raf);
+        }
+
+        raf = null;
+    }
+
+    // Pagination 10 baris.
+    function renderTable() {
+        if (!tbody) return;
+
+        const pages = Math.max(
+            1,
+            Math.ceil(rows.length / PAGE_SIZE)
+        );
+
+        activePage = Math.max(
+            1,
+            Math.min(activePage, pages)
+        );
+
+        if (count) {
+            count.textContent = String(rows.length);
+        }
+
+        if (pageInfo) {
+            pageInfo.textContent =
+                `Halaman ${activePage} dari ${pages}`;
+        }
+
+        if (prev) prev.disabled = activePage <= 1;
+        if (next) next.disabled = activePage >= pages;
+
+        if (numbers) {
+            numbers.replaceChildren();
+
+            const from = Math.max(
+                1,
+                Math.min(activePage - 2, pages - 4)
+            );
+
+            for (
+                let p = from;
+                p <= Math.min(pages, from + 4);
+                p++
+            ) {
+                const b = document.createElement('button');
+
+                b.type = 'button';
+                b.className = 'button secondary';
+                b.textContent = String(p);
+                b.disabled = p === activePage;
+                b.setAttribute(
+                    'aria-label',
+                    `Halaman ${p}`
+                );
+
+                b.addEventListener('click', () => {
+                    activePage = p;
+                    renderTable();
+                });
+
+                numbers.append(b);
+            }
+        }
+
+        tbody.replaceChildren();
+
+        const visible = rows.slice().reverse().slice(
+            (activePage - 1) * PAGE_SIZE,
+            activePage * PAGE_SIZE
+        );
+
+        if (!visible.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+
+            td.colSpan = 5;
+            td.textContent = 'Belum ada data hari ini';
+
+            tr.append(td);
+            tbody.append(tr);
+            return;
+        }
+
+        for (const r of visible) {
+            const tr = document.createElement('tr');
+
+            [
+                r.waktu,
+                fmt(r.water_level_cm),
+                fmt(r.sensor_distance_cm),
+                fmt(r.change_1h_cm),
+                trendLabels[r.trend] || '—'
+            ].forEach(value => {
+                const td = document.createElement('td');
+                td.textContent = String(value);
+                tr.append(td);
+            });
+
+            tbody.append(tr);
+        }
+    }
+
+    function render() {
+        drawAll();
+        renderTable();
+
+        const last = rows[rows.length - 1];
+
+        setNow('water_level_cm', fmt(last?.water_level_cm));
+        setNow('sensor_distance_cm', fmt(last?.sensor_distance_cm));
+        setNow('change_1h_cm', fmt(last?.change_1h_cm));
+
+        setNow(
+            'trend',
+            trendLabels[last?.trend] || '—'
+        );
+
+        setNow(
+            'observed_at',
+            last?.waktu ? `${last.waktu} WIB` : '—'
+        );
+
+        if (!last) {
+            fresh = false;
+
+            if (badge) {
+                badge.textContent = 'BELUM ADA DATA';
+            }
+
+            setSource('Belum ada data hari ini');
+            return;
+        }
+
+        const age = Date.now()
+            - Date.parse(last.observed_at || '');
+        fresh =
+            Number.isFinite(age) &&
+            age >= -60000 &&
+            age <= 15 * 60000;
+        const level = levelOf(last.water_level_cm);
+        if (badge) {
+            badge.textContent =
+                last.water_level_cm === null
+                    ? 'DATA SENSOR TIDAK VALID'
+                    : !fresh
+                        ? 'DATA TERLAMBAT'
+                        : level === 'unconfigured'
+                            ? 'AMBANG BELUM DIATUR'
+                            : labels[level] || '—';
+            badge.className = `weather-level${
+                fresh && labels[level]
+                    ? ' river-' + level
+                    : ''
+            }`;
+        }
+        if (last.water_level_cm === null) {
+            setSource('Data sensor tidak valid', 'error');
+        } else if (!fresh) {
+            setSource('Data pengukuran terlambat', 'dummy');
+        } else {
+            setSource('Data API tersedia', 'live');
+        }
+    }
+    async function refresh() {
+        if (loading) return;
+        loading = true;
+        try {
+            const response = await fetch(feedUrl, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+            const raw = await response.text();
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}: ${raw.slice(0, 120)}`
+                );
+            }
+            let feed;
+            try {
+                feed = JSON.parse(raw);
+            } catch {
+                throw new Error(
+                    `Respons bukan JSON: ${raw.slice(0, 160)}`
+                );
+            }
+            const data = Array.isArray(feed.history) ? feed.history : feed.data;
+            if (!Array.isArray(data)) {
+                throw new Error('history/data bukan array');
+            }
+            if (feed.date !== activeDate) {
+                activeDate = feed.date;
+                activePage = 1;
+            }
+            rows = data
+                .filter(r =>
+                    r && r.tanggal === feed.date
+                )
+                .map(normalize)
+                .filter(r =>
+                    seconds(r.waktu) !== null
+                )
+                .sort((a, b) =>
+                    seconds(a.waktu) - seconds(b.waktu) ||
+                    Number(a.id || 0) - Number(b.id || 0)
+                );
+            thresholds = getRules(feed);
+            if (dateLabel) {
+                dateLabel.textContent = feed.date || '—';
+            }
             render();
-        } catch (error) {
-            source.className = 'weather-source error';
-            source.lastChild.textContent = 'Gagal memuat data';
+        } catch (err) {
+            console.error('[RIVER FEED]', err);
+            fresh = false;
+            setSource('Gagal mengambil data API', 'error');
+            if (badge) {
+                badge.textContent = 'KONEKSI BERMASALAH';
+                badge.className = 'weather-level';
+            }
+        } finally {
+            loading = false;
+        }
+    }
+    prev?.addEventListener('click', () => {
+        activePage--;
+        renderTable();
+    });
+    next?.addEventListener('click', () => {
+        activePage++;
+        renderTable();
+    });
+    canvases.forEach(canvas => {
+        canvas.style.cursor = 'crosshair';
+        const update = event => {
+            const rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            hover.set(canvas, {
+                x: (event.clientX - rect.left) *
+                    canvas.clientWidth / rect.width,
+                y: (event.clientY - rect.top) *
+                    canvas.clientHeight / rect.height
+            });
+            if (raf === null) {
+                draw(canvas);
+            }
+        };
+        canvas.addEventListener('pointermove', event => {
+            if (event.pointerType !== 'touch') {
+                update(event);
+            }
+        });
+        canvas.addEventListener('pointerdown', update);
+        canvas.addEventListener('pointerleave', () => {
+            hover.delete(canvas);
+            draw(canvas);
+        });
+    });
+    const updateClock = () => {
+        if (clock) {
+            clock.textContent = new Intl.DateTimeFormat('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date());
         }
     };
-    window.addEventListener('resize', render);
+    updateClock();
+    setInterval(updateClock, 1000);
+    window.addEventListener('resize', () => {
+        drawAll();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopAnimation();
+        } else {
+            refresh();
+            startAnimation();
+        }
+    });
     refresh();
-    setInterval(refresh, 5000);
+    startAnimation();
+    setInterval(refresh, 300000);
 })();
 
-// (() => {
-//     const page = document.querySelector('[data-tide-monitor]');
-//     if (!page) return;
-//     const levels = JSON.parse(page.dataset.levels || '{}');
-//     const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-//     const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-//     const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
-//     const trends = { rising: '▲ Naik', falling: '▼ Surut', steady: '■ Stabil' };
-//     const MAX_POINTS = 120;
-//     let series = [];
-//     let thresholds = {};
-//     const source = page.querySelector('[data-monitor-source]');
-//     const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-//         const t = thresholds[key];
-//         return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
-//     }, 'normal');
 
-//     const draw = (canvas) => {
-//         const key = canvas.dataset.chart;
-//         const digits = Number(canvas.dataset.digits);
-//         const color = canvas.dataset.color;
-//         const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
-//         const ratio = window.devicePixelRatio || 1;
-//         const width = canvas.clientWidth;
-//         const height = canvas.clientHeight;
-//         if (!width || !height) return;
-//         canvas.width = width * ratio;
-//         canvas.height = height * ratio;
-//         const ctx = canvas.getContext('2d');
-//         ctx.scale(ratio, ratio);
-//         ctx.clearRect(0, 0, width, height);
-//         const pad = { l: 46, r: 12, t: 10, b: 22 };
-//         const values = series.map((row) => Number(row[key]));
-//         if (values.length < 2) return;
-//         let min = Math.min(...values, ...lines.map(([, t]) => t.value));
-//         let max = Math.max(...values, ...lines.map(([, t]) => t.value));
-//         if (max - min < 1e-6) { max += 1; min -= 1; }
-//         const span = max - min;
-//         min -= span * 0.08;
-//         max += span * 0.08;
-//         const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
-//         const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
-//         ctx.font = '10px system-ui, sans-serif';
-//         ctx.fillStyle = '#75858a';
-//         ctx.strokeStyle = '#e4ebe8';
-//         ctx.lineWidth = 1;
-//         for (let g = 0; g <= 4; g += 1) {
-//             const v = min + (max - min) * g / 4;
-//             ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
-//             ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-//             ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
-//         }
-//         ctx.textBaseline = 'alphabetic';
-//         [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
-//             ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
-//             ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
-//         });
-//         lines.forEach(([sev, t]) => {
-//             ctx.save();
-//             ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
-//             ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
-//             ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
-//             ctx.fillText(levels[sev] + ' ' + fmt(t.value, 2), width - pad.r - 2, y(t.value) - 3);
-//             ctx.restore();
-//         });
-//         ctx.beginPath();
-//         values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
-//         ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-//         ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
-//         ctx.fillStyle = color; ctx.fill();
-//     };
-
-//     const render = () => {
-//         page.querySelectorAll('canvas[data-chart]').forEach(draw);
-//         const last = series[series.length - 1];
-//         if (!last) return;
-//         const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
-//         now('tide_level_m', fmt(last.tide_level_m, 2));
-//         now('change_1h_m', (last.change_1h_m > 0 ? '+' : '') + fmt(last.change_1h_m, 2));
-//         now('wave_height_m', fmt(last.wave_height_m));
-//         now('wind_kmh', fmt(last.wind_kmh));
-//         now('observed_at', clock(last.observed_at));
-//         const change = Number(last.change_1h_m);
-//         const trend = change >= 0.05 ? 'rising' : (change <= -0.05 ? 'falling' : 'steady');
-//         now('trend', trends[trend]);
-//         page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
-//         const level = levelOf(Number(last.tide_level_m));
-//         const badge = page.querySelector('[data-monitor-level]');
-//         badge.textContent = levels[level];
-//         badge.className = 'weather-level river-' + level;
-//         const body = page.querySelector('[data-monitor-rows]');
-//         body.replaceChildren(...series.slice(-12).reverse().map((row) => {
-//             const tr = document.createElement('tr');
-//             [clock(row.observed_at), fmt(row.tide_level_m, 2), (row.change_1h_m > 0 ? '+' : '') + fmt(row.change_1h_m, 2), fmt(row.wave_height_m), fmt(row.wind_kmh)].forEach((text) => {
-//                 const td = document.createElement('td'); td.textContent = text; tr.append(td);
-//             });
-//             return tr;
-//         }));
-//     };
-
-//     let first = true;
-//     const refresh = async () => {
-//         try {
-//             const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-//             if (!response.ok) throw new Error('feed');
-//             const data = await response.json();
-//             if (first && Array.isArray(data.history)) series = data.history.slice();
-//             first = false;
-//             const row = data.stations[0];
-//             if (row) {
-//                 thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-//                 if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
-//             }
-//             series = series.slice(-MAX_POINTS);
-//             page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
-//             source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-//             source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
-//             render();
-//         } catch (error) {
-//             source.className = 'weather-source error';
-//             source.lastChild.textContent = 'Gagal memuat data';
-//         }
-//     };
-//     window.addEventListener('resize', render);
-//     refresh();
-//     setInterval(refresh, 5000);
-// })();
-
+// Tornado
 (() => {
     const page = document.querySelector('[data-tornado-monitor]');
     if (!page) return;
@@ -1189,7 +1874,7 @@ document.addEventListener('submit', (event) => {
 })();
 
 
-
+// Pasang Surut Air Laut
 (() => {
     const page = document.querySelector('[data-tide-live-monitor]');
     if (!page) return;
@@ -1413,7 +2098,6 @@ document.addEventListener('submit', (event) => {
         const lastY = y(last.v);
         const dotColor = canvas.dataset.color || '#2f80c9';
 
-        // Ripple 1
         const ripple1 = (pulsePhase % 1);
         const radius1 = 4 + ripple1 * 14;
         const alpha1 = 0.35 * (1 - ripple1);
@@ -1424,7 +2108,6 @@ document.addEventListener('submit', (event) => {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Ripple 2
         const ripple2 = ((pulsePhase + 0.5) % 1);
         const radius2 = 4 + ripple2 * 14;
         const alpha2 = 0.25 * (1 - ripple2);
@@ -1435,27 +2118,19 @@ document.addEventListener('submit', (event) => {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Titik inti
         ctx.beginPath();
         ctx.arc(lastX, lastY, 4.5, 0, Math.PI * 2);
         ctx.fillStyle = dotColor;
         ctx.fill();
 
-        // Titik putih kecil di tengah agar terlihat hidup
         ctx.beginPath();
         ctx.arc(lastX, lastY, 1.6, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fill();
-
-        // TOOLTIP INTERAKTIF
         const hover = hoverPositions.get(canvas);
-
         if (!hover) return;
-
         let nearest = null;
         let nearestDistance = 28 * 28;
-
-        // Cari titik pengukuran terdekat dengan kursor
         for (const point of points) {
             const dx = x(point.t) - hover.x;
             const dy = y(point.v) - hover.y;

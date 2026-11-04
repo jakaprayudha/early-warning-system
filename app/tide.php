@@ -125,8 +125,7 @@ function tide_dummy_history(string $code): array
 }
 
 
-function tide_fetch_feed(array $codes): array
-{
+function tide_fetch_feed(array $codes): array{
     $url = 'http://72.62.124.177:3200/api/getDataSensor';
     $token = (string) (getenv('EWS_API_TOKEN') ?: '');
     if ($token === '') {
