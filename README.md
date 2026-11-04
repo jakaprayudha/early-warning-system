@@ -151,7 +151,7 @@ Menu `?page=dashboard&section=river` (grup Pemantauan): menampilkan lokasi berba
 
 Menu **Pemantauan → Monitoring pasang surut** menampilkan pos pantai/muara (bahaya `coastal_tide`) beserta tinggi pasang terbaru. Status Normal/Waspada/Siaga/Awas dihitung dari ambang `tide_height` yang berstatus approved (cm di Parameter dikonversi ke meter).
 
-- Endpoint JSON: `GET /?page=api-tide-feed` (wajib login, dibatasi cakupan wilayah). Halaman memperbarui diri tiap 15 detik.
+- Endpoint JSON: `GET /?page=` (wajib login, dibatasi cakupan wilayah). Halaman memperbarui diri tiap 15 detik.
 - Tanpa konfigurasi, data berasal dari simulasi (tidak disimpan). Isi `APP_TIDE_FEED_URL` dengan URL http(s) API sensor asli; bila gagal, kembali ke simulasi.
 - Skema JSON: `{"generated_at": "...", "stations": [{"code": "DS-PAN-PALUH-KURAU", "observed_at": "...", "tide_level_m": 1.5, "change_1h_m": 0.2, "wave_height_m": 0.4, "wind_kmh": 18}]}`
 

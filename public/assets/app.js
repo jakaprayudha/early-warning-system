@@ -860,133 +860,133 @@ if (locationMap) {
     setInterval(refresh, 5000);
 })();
 
-(() => {
-    const page = document.querySelector('[data-tide-monitor]');
-    if (!page) return;
-    const levels = JSON.parse(page.dataset.levels || '{}');
-    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-    const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
-    const trends = { rising: '▲ Naik', falling: '▼ Surut', steady: '■ Stabil' };
-    const MAX_POINTS = 120;
-    let series = [];
-    let thresholds = {};
-    const source = page.querySelector('[data-monitor-source]');
-    const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-        const t = thresholds[key];
-        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
-    }, 'normal');
+// (() => {
+//     const page = document.querySelector('[data-tide-monitor]');
+//     if (!page) return;
+//     const levels = JSON.parse(page.dataset.levels || '{}');
+//     const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+//     const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
+//     const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
+//     const trends = { rising: '▲ Naik', falling: '▼ Surut', steady: '■ Stabil' };
+//     const MAX_POINTS = 120;
+//     let series = [];
+//     let thresholds = {};
+//     const source = page.querySelector('[data-monitor-source]');
+//     const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
+//         const t = thresholds[key];
+//         return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
+//     }, 'normal');
 
-    const draw = (canvas) => {
-        const key = canvas.dataset.chart;
-        const digits = Number(canvas.dataset.digits);
-        const color = canvas.dataset.color;
-        const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
-        const ratio = window.devicePixelRatio || 1;
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-        if (!width || !height) return;
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(ratio, ratio);
-        ctx.clearRect(0, 0, width, height);
-        const pad = { l: 46, r: 12, t: 10, b: 22 };
-        const values = series.map((row) => Number(row[key]));
-        if (values.length < 2) return;
-        let min = Math.min(...values, ...lines.map(([, t]) => t.value));
-        let max = Math.max(...values, ...lines.map(([, t]) => t.value));
-        if (max - min < 1e-6) { max += 1; min -= 1; }
-        const span = max - min;
-        min -= span * 0.08;
-        max += span * 0.08;
-        const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
-        const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.fillStyle = '#75858a';
-        ctx.strokeStyle = '#e4ebe8';
-        ctx.lineWidth = 1;
-        for (let g = 0; g <= 4; g += 1) {
-            const v = min + (max - min) * g / 4;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
-            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-            ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
-        }
-        ctx.textBaseline = 'alphabetic';
-        [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
-            ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
-            ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
-        });
-        lines.forEach(([sev, t]) => {
-            ctx.save();
-            ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
-            ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
-            ctx.fillText(levels[sev] + ' ' + fmt(t.value, 2), width - pad.r - 2, y(t.value) - 3);
-            ctx.restore();
-        });
-        ctx.beginPath();
-        values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
-        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-        ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
-    };
+//     const draw = (canvas) => {
+//         const key = canvas.dataset.chart;
+//         const digits = Number(canvas.dataset.digits);
+//         const color = canvas.dataset.color;
+//         const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
+//         const ratio = window.devicePixelRatio || 1;
+//         const width = canvas.clientWidth;
+//         const height = canvas.clientHeight;
+//         if (!width || !height) return;
+//         canvas.width = width * ratio;
+//         canvas.height = height * ratio;
+//         const ctx = canvas.getContext('2d');
+//         ctx.scale(ratio, ratio);
+//         ctx.clearRect(0, 0, width, height);
+//         const pad = { l: 46, r: 12, t: 10, b: 22 };
+//         const values = series.map((row) => Number(row[key]));
+//         if (values.length < 2) return;
+//         let min = Math.min(...values, ...lines.map(([, t]) => t.value));
+//         let max = Math.max(...values, ...lines.map(([, t]) => t.value));
+//         if (max - min < 1e-6) { max += 1; min -= 1; }
+//         const span = max - min;
+//         min -= span * 0.08;
+//         max += span * 0.08;
+//         const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
+//         const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
+//         ctx.font = '10px system-ui, sans-serif';
+//         ctx.fillStyle = '#75858a';
+//         ctx.strokeStyle = '#e4ebe8';
+//         ctx.lineWidth = 1;
+//         for (let g = 0; g <= 4; g += 1) {
+//             const v = min + (max - min) * g / 4;
+//             ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
+//             ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+//             ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
+//         }
+//         ctx.textBaseline = 'alphabetic';
+//         [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
+//             ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
+//             ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
+//         });
+//         lines.forEach(([sev, t]) => {
+//             ctx.save();
+//             ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
+//             ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
+//             ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
+//             ctx.fillText(levels[sev] + ' ' + fmt(t.value, 2), width - pad.r - 2, y(t.value) - 3);
+//             ctx.restore();
+//         });
+//         ctx.beginPath();
+//         values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+//         ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+//         ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
+//         ctx.fillStyle = color; ctx.fill();
+//     };
 
-    const render = () => {
-        page.querySelectorAll('canvas[data-chart]').forEach(draw);
-        const last = series[series.length - 1];
-        if (!last) return;
-        const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
-        now('tide_level_m', fmt(last.tide_level_m, 2));
-        now('change_1h_m', (last.change_1h_m > 0 ? '+' : '') + fmt(last.change_1h_m, 2));
-        now('wave_height_m', fmt(last.wave_height_m));
-        now('wind_kmh', fmt(last.wind_kmh));
-        now('observed_at', clock(last.observed_at));
-        const change = Number(last.change_1h_m);
-        const trend = change >= 0.05 ? 'rising' : (change <= -0.05 ? 'falling' : 'steady');
-        now('trend', trends[trend]);
-        page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
-        const level = levelOf(Number(last.tide_level_m));
-        const badge = page.querySelector('[data-monitor-level]');
-        badge.textContent = levels[level];
-        badge.className = 'weather-level river-' + level;
-        const body = page.querySelector('[data-monitor-rows]');
-        body.replaceChildren(...series.slice(-12).reverse().map((row) => {
-            const tr = document.createElement('tr');
-            [clock(row.observed_at), fmt(row.tide_level_m, 2), (row.change_1h_m > 0 ? '+' : '') + fmt(row.change_1h_m, 2), fmt(row.wave_height_m), fmt(row.wind_kmh)].forEach((text) => {
-                const td = document.createElement('td'); td.textContent = text; tr.append(td);
-            });
-            return tr;
-        }));
-    };
+//     const render = () => {
+//         page.querySelectorAll('canvas[data-chart]').forEach(draw);
+//         const last = series[series.length - 1];
+//         if (!last) return;
+//         const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
+//         now('tide_level_m', fmt(last.tide_level_m, 2));
+//         now('change_1h_m', (last.change_1h_m > 0 ? '+' : '') + fmt(last.change_1h_m, 2));
+//         now('wave_height_m', fmt(last.wave_height_m));
+//         now('wind_kmh', fmt(last.wind_kmh));
+//         now('observed_at', clock(last.observed_at));
+//         const change = Number(last.change_1h_m);
+//         const trend = change >= 0.05 ? 'rising' : (change <= -0.05 ? 'falling' : 'steady');
+//         now('trend', trends[trend]);
+//         page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
+//         const level = levelOf(Number(last.tide_level_m));
+//         const badge = page.querySelector('[data-monitor-level]');
+//         badge.textContent = levels[level];
+//         badge.className = 'weather-level river-' + level;
+//         const body = page.querySelector('[data-monitor-rows]');
+//         body.replaceChildren(...series.slice(-12).reverse().map((row) => {
+//             const tr = document.createElement('tr');
+//             [clock(row.observed_at), fmt(row.tide_level_m, 2), (row.change_1h_m > 0 ? '+' : '') + fmt(row.change_1h_m, 2), fmt(row.wave_height_m), fmt(row.wind_kmh)].forEach((text) => {
+//                 const td = document.createElement('td'); td.textContent = text; tr.append(td);
+//             });
+//             return tr;
+//         }));
+//     };
 
-    let first = true;
-    const refresh = async () => {
-        try {
-            const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('feed');
-            const data = await response.json();
-            if (first && Array.isArray(data.history)) series = data.history.slice();
-            first = false;
-            const row = data.stations[0];
-            if (row) {
-                thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-                if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
-            }
-            series = series.slice(-MAX_POINTS);
-            page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
-            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
-            render();
-        } catch (error) {
-            source.className = 'weather-source error';
-            source.lastChild.textContent = 'Gagal memuat data';
-        }
-    };
-    window.addEventListener('resize', render);
-    refresh();
-    setInterval(refresh, 5000);
-})();
+//     let first = true;
+//     const refresh = async () => {
+//         try {
+//             const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+//             if (!response.ok) throw new Error('feed');
+//             const data = await response.json();
+//             if (first && Array.isArray(data.history)) series = data.history.slice();
+//             first = false;
+//             const row = data.stations[0];
+//             if (row) {
+//                 thresholds = (data.thresholds && data.thresholds[row.code]) || {};
+//                 if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
+//             }
+//             series = series.slice(-MAX_POINTS);
+//             page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
+//             source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
+//             source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+//             render();
+//         } catch (error) {
+//             source.className = 'weather-source error';
+//             source.lastChild.textContent = 'Gagal memuat data';
+//         }
+//     };
+//     window.addEventListener('resize', render);
+//     refresh();
+//     setInterval(refresh, 5000);
+// })();
 
 (() => {
     const page = document.querySelector('[data-tornado-monitor]');
@@ -1118,28 +1118,28 @@ if (locationMap) {
 
 
 document.addEventListener('submit', (event) => {
-  const message = event.target.getAttribute && event.target.getAttribute('data-confirm');
-  if (message && !window.confirm(message)) {
-    event.preventDefault();
-  }
+    const message = event.target.getAttribute && event.target.getAttribute('data-confirm');
+    if (message && !window.confirm(message)) {
+        event.preventDefault();
+    }
 });
 
 (function () {
-  const blocks = document.querySelectorAll('[data-qr-path]');
-  if (blocks.length && typeof qrcode === 'function') {
-    blocks.forEach((block) => {
-      const qr = qrcode(0, 'M');
-      qr.addData(window.location.origin + block.getAttribute('data-qr-path'));
-      qr.make();
-      block.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    const blocks = document.querySelectorAll('[data-qr-path]');
+    if (blocks.length && typeof qrcode === 'function') {
+        blocks.forEach((block) => {
+            const qr = qrcode(0, 'M');
+            qr.addData(window.location.origin + block.getAttribute('data-qr-path'));
+            qr.make();
+            block.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+        });
+    }
+    if (document.body.hasAttribute('data-autoprint')) {
+        window.addEventListener('load', () => setTimeout(() => window.print(), 300));
+    }
+    document.querySelectorAll('[data-print]').forEach((button) => {
+        button.addEventListener('click', () => window.print());
     });
-  }
-  if (document.body.hasAttribute('data-autoprint')) {
-    window.addEventListener('load', () => setTimeout(() => window.print(), 300));
-  }
-  document.querySelectorAll('[data-print]').forEach((button) => {
-    button.addEventListener('click', () => window.print());
-  });
 })();
 
 (() => {
@@ -1187,3 +1187,630 @@ document.addEventListener('submit', (event) => {
     canvases.forEach(draw);
     window.addEventListener('resize', () => canvases.forEach(draw));
 })();
+
+
+
+(() => {
+    const page = document.querySelector('[data-tide-live-monitor]');
+    if (!page) return;
+    const feedUrl = page.dataset.feedUrl;
+    const source = page.querySelector('[data-monitor-source]');
+    const badge = page.querySelector('[data-monitor-level]');
+    const tbody = page.querySelector('[data-monitor-rows]');
+    const count = page.querySelector('[data-monitor-count]');
+    const dateLabel = page.querySelector('[data-monitor-date]');
+    const pageInfo = page.querySelector('[data-page-info]');
+    const pageNumbers = page.querySelector('[data-page-numbers]');
+    const prevButton = page.querySelector('[data-page-prev]');
+    const nextButton = page.querySelector('[data-page-next]');
+    const clock = page.querySelector('[data-monitor-clock]');
+    const PAGE_SIZE = 10;
+    let rows = [];
+    let thresholds = {};
+    let activePage = 1;
+    let activeDate = '';
+    let loading = false;
+    let animationFrameId = null;
+    let pulsePhase = 0;
+    const hoverPositions = new WeakMap();
+    const num = value => {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    };
+    const fmt = (value, digits = 1) =>
+        typeof value === 'number' && Number.isFinite(value)
+            ? value.toLocaleString('id-ID', {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
+            })
+            : '—';
+    const timeSeconds = waktu => {
+        const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(waktu || '');
+        if (!m) return null;
+        const [h, min, s] = m.slice(1).map(Number);
+        return h < 24 && min < 60 && s < 60
+            ? h * 3600 + min * 60 + s
+            : null;
+    };
+    const setNow = (key, value) => {
+        const el = page.querySelector(`[data-now="${key}"]`);
+        if (el) el.textContent = value;
+    };
+    const setSource = (text, state = 'dummy') => {
+        if (!source) return;
+        source.className = 'weather-source ' + state;
+        source.textContent = text;
+    };
+    function normalize(item) {
+        const heightM = num(item.tide_level_m);
+        const distanceM = num(item.sensor_distance_m);
+        const changeM = num(item.change_1h_m);
+        const heightMm = num(item.tinggi_air);
+        const distanceMm = num(item.water_level);
+        return {
+            id: item.id ?? null,
+            tanggal: item.tanggal,
+            waktu: item.waktu || item.observed_at?.slice(11, 19) || '',
+            observed_at: item.observed_at,
+            tide_level_cm: heightM !== null
+                ? heightM * 100
+                : heightMm === null ? null : heightMm / 10,
+            sensor_distance_cm: distanceM !== null
+                ? distanceM * 100
+                : distanceMm === null ? null : distanceMm / 10,
+            change_1h_cm: changeM === null
+                ? null : changeM * 100,
+            trend: item.trend || 'TIDAK_ADA_DATA'
+        };
+    }
+    function readThresholds(feed) {
+        const code = new URL(
+            feedUrl,
+            location.href
+        ).searchParams.get('code');
+        const data = feed.thresholds?.[code] || {};
+        const result = {};
+        for (const key of ['watch', 'alert', 'warning']) {
+            const value = num(data[key]?.value);
+            if (value !== null) {
+                result[key] = {
+                    value: value * 100,
+                    op: data[key].op === '>' ? '>' : '>='
+                };
+            }
+        }
+        return result;
+    }
+    function waterStatus(height) {
+        if (height === null) return 'INVALID';
+        if (!Object.keys(thresholds).length) {
+            return 'UNCONFIGURED';
+        }
+        let status = 'normal';
+        for (const key of ['watch', 'alert', 'warning']) {
+            const rule = thresholds[key];
+            if (
+                rule &&
+                (rule.op === '>'
+                    ? height > rule.value
+                    : height >= rule.value)
+            ) {
+                status = key;
+            }
+        }
+        return status;
+    }
+    function draw(canvas) {
+        const key = canvas.dataset.chart;
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight || 260;
+        if (!width || !height) return;
+        const ratio = Math.min(window.devicePixelRatio || 1, 3);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        const left = 52;
+        const right = 16;
+        const top = 18;
+        const bottom = 32;
+        const plotW = width - left - right;
+        const plotH = height - top - bottom;
+        if (plotW <= 0 || plotH <= 0) return;
+        const points = rows
+            .map(r => ({
+                t: timeSeconds(r.waktu),
+                v: num(r[key])
+            }))
+            .filter(p => p.t !== null && p.v !== null);
+        const lines = key === 'tide_level_cm'
+            ? Object.entries(thresholds)
+            : [];
+        const values = [
+            ...points.map(p => p.v),
+            ...lines.map(([, rule]) => rule.value)
+        ];
+        if (!values.length) return;
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+        if (max - min < 0.01) {
+            min -= 5;
+            max += 5;
+        }
+        const margin = (max - min) * 0.1;
+        min -= margin;
+        max += margin;
+        const x = t => left + (t / 86400) * plotW;
+        const y = v =>
+            top + (1 - (v - min) / (max - min)) * plotH;
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = '#75858a';
+        ctx.strokeStyle = '#e4ebe8';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const v = min + (max - min) * i / 4;
+            ctx.beginPath();
+            ctx.moveTo(left, y(v));
+            ctx.lineTo(width - right, y(v));
+            ctx.stroke();
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(fmt(v), left - 6, y(v));
+        }
+        const labels = [
+            [0, '00:00'],
+            [21600, '06:00'],
+            [43200, '12:00'],
+            [64800, '18:00'],
+            [86400, '24:00']
+        ];
+        labels.forEach(([t, label]) => {
+            ctx.textBaseline = 'alphabetic';
+            ctx.textAlign = t === 0
+                ? 'left'
+                : t === 86400 ? 'right' : 'center';
+            ctx.fillText(label, x(t), height - 8);
+        });
+        const colors = {
+            watch: '#d9822b',
+            alert: '#c8541a',
+            warning: '#b53a31'
+        };
+        for (const [status, rule] of lines) {
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = colors[status];
+            ctx.beginPath();
+            ctx.moveTo(left, y(rule.value));
+            ctx.lineTo(width - right, y(rule.value));
+            ctx.stroke();
+            ctx.restore();
+        }
+        if (!points.length) return;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+            if (
+                i === 0 ||
+                p.t - points[i - 1].t > 900
+            ) {
+                ctx.moveTo(x(p.t), y(p.v));
+            } else {
+                ctx.lineTo(x(p.t), y(p.v));
+            }
+        });
+        ctx.strokeStyle = canvas.dataset.color || '#2f80c9';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        const last = points[points.length - 1];
+        const lastX = x(last.t);
+        const lastY = y(last.v);
+        const dotColor = canvas.dataset.color || '#2f80c9';
+
+        // Ripple 1
+        const ripple1 = (pulsePhase % 1);
+        const radius1 = 4 + ripple1 * 14;
+        const alpha1 = 0.35 * (1 - ripple1);
+
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, radius1, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(47, 128, 201, ${alpha1})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Ripple 2
+        const ripple2 = ((pulsePhase + 0.5) % 1);
+        const radius2 = 4 + ripple2 * 14;
+        const alpha2 = 0.25 * (1 - ripple2);
+
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, radius2, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(47, 128, 201, ${alpha2})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Titik inti
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = dotColor;
+        ctx.fill();
+
+        // Titik putih kecil di tengah agar terlihat hidup
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // TOOLTIP INTERAKTIF
+        const hover = hoverPositions.get(canvas);
+
+        if (!hover) return;
+
+        let nearest = null;
+        let nearestDistance = 28 * 28;
+
+        // Cari titik pengukuran terdekat dengan kursor
+        for (const point of points) {
+            const dx = x(point.t) - hover.x;
+            const dy = y(point.v) - hover.y;
+            const distance = dx * dx + dy * dy;
+
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = point;
+            }
+        }
+        if (!nearest) return;
+        const px = x(nearest.t);
+        const py = y(nearest.v);
+        const hours = String(Math.floor(nearest.t / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor((nearest.t % 3600) / 60)).padStart(2, '0');
+        const seconds = String(
+            nearest.t % 60
+        ).padStart(2, '0');
+        const timeText = `${hours}:${minutes}:${seconds} WIB`;
+        const titles = {
+            tide_level_cm: 'Tinggi pasang',
+            sensor_distance_cm: 'Jarak radar ke air',
+            change_1h_cm: 'Perubahan 1 jam'
+        };
+        const title = titles[key] || 'Pengukuran';
+        const valueText = `${fmt(nearest.v)} cm`;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = '#84969e';
+        ctx.lineWidth = 1;
+        ctx.moveTo(px, top);
+        ctx.lineTo(px, height - bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(px, py, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = canvas.dataset.color || '#2f80c9';
+        ctx.stroke();
+        ctx.font = '12px system-ui, sans-serif';
+        const textWidth = Math.max(
+            ctx.measureText(title).width,
+            ctx.measureText(timeText).width,
+            ctx.measureText(valueText).width
+        );
+        const boxWidth = Math.min(width - 16, Math.max(145, textWidth + 24));
+        const boxHeight = 82;
+        const boxX = Math.max(8, Math.min(px + 14, width - boxWidth - 8));
+        let boxY = py - boxHeight - 12;
+        if (boxY < 8) {
+            boxY = py + 12;
+        }
+        boxY = Math.max(8, Math.min(boxY, height - boxHeight - 8));
+        ctx.fillStyle = 'rgba(20, 43, 56, 0.96)';
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+        ctx.fill();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.fillText(title, boxX + 12, boxY + 18);
+        ctx.font = '12px system-ui, sans-serif';
+        ctx.fillText(timeText, boxX + 12, boxY + 42);
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.fillText(valueText, boxX + 12, boxY + 64);
+        ctx.restore();
+    }
+    function animateCharts() {
+        pulsePhase += 0.008;
+        page.querySelectorAll('canvas[data-chart]').forEach(draw);
+        animationFrameId = requestAnimationFrame(animateCharts);
+    }
+    function renderTable() {
+        if (!tbody) return;
+        const totalPages = Math.max(
+            1,
+            Math.ceil(rows.length / PAGE_SIZE)
+        );
+        activePage = Math.min(
+            Math.max(1, activePage),
+            totalPages
+        );
+        if (pageInfo) {
+            pageInfo.textContent =
+                `Halaman ${activePage} dari ${totalPages}`;
+        }
+        if (count) {
+            count.textContent = String(rows.length);
+        }
+        if (prevButton) {
+            prevButton.disabled = activePage === 1;
+        }
+        if (nextButton) {
+            nextButton.disabled = activePage === totalPages;
+        }
+        if (pageNumbers) {
+            pageNumbers.replaceChildren();
+            const from = Math.max(
+                1,
+                Math.min(activePage - 2, totalPages - 4)
+            );
+            const to = Math.min(totalPages, from + 4);
+            for (let n = from; n <= to; n++) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'button secondary';
+                button.textContent = String(n);
+                button.disabled = n === activePage;
+                button.setAttribute('aria-label', `Halaman ${n}`);
+                button.addEventListener('click', () => {
+                    activePage = n;
+                    renderTable();
+                });
+                pageNumbers.append(button);
+            }
+        }
+        tbody.replaceChildren();
+        const visible = [...rows].reverse().slice(
+            (activePage - 1) * PAGE_SIZE,
+            activePage * PAGE_SIZE
+        );
+        if (!visible.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 6;
+            td.textContent = 'Belum ada data hari ini';
+            tr.append(td);
+            tbody.append(tr);
+            return;
+        }
+        const trends = {
+            NAIK: '▲ Naik',
+            TURUN: '▼ Surut',
+            STABIL: '■ Stabil'
+        };
+        for (const row of visible) {
+            const tr = document.createElement('tr');
+            const values = [
+                row.id ?? '—',
+                row.waktu,
+                fmt(row.sensor_distance_cm),
+                fmt(row.tide_level_cm),
+                fmt(row.change_1h_cm),
+                trends[row.trend] || '—'
+            ];
+            for (const value of values) {
+                const td = document.createElement('td');
+                td.textContent = String(value);
+                tr.append(td);
+            }
+            tbody.append(tr);
+        }
+    }
+    function renderCurrent() {
+        page.querySelectorAll('canvas[data-chart]').forEach(draw);
+        renderTable();
+        const last = rows[rows.length - 1];
+        for (const field of [
+            'tide_level_cm',
+            'sensor_distance_cm',
+            'change_1h_cm'
+        ]) {
+            setNow(field, last ? fmt(last[field]) : '—');
+        }
+        const trends = {
+            NAIK: '▲ Naik',
+            TURUN: '▼ Surut',
+            STABIL: '■ Stabil'
+        };
+        setNow(
+            'trend',
+            last ? (trends[last.trend] || '—') : '—'
+        );
+        setNow(
+            'observed_at',
+            last?.waktu ? last.waktu + ' WIB' : '—'
+        );
+        if (!last) {
+            if (badge) {
+                badge.textContent = 'BELUM ADA DATA';
+                badge.className = 'weather-level';
+            }
+            setSource('Belum ada data hari ini');
+            return;
+        }
+        const timestamp = Date.parse(last.observed_at || '');
+        const ageMs = Date.now() - timestamp;
+        const fresh =
+            Number.isFinite(ageMs) &&
+            ageMs >= -60000 &&
+            ageMs <= 15 * 60000;
+        const status = waterStatus(last.tide_level_cm);
+        const statusText = {
+            normal: 'NORMAL',
+            watch: 'WASPADA',
+            alert: 'SIAGA',
+            warning: 'BAHAYA',
+            UNCONFIGURED: 'AMBANG BELUM DIATUR',
+            INVALID: 'DATA SENSOR TIDAK VALID'
+        };
+        if (badge) {
+            badge.textContent = !fresh
+                ? 'DATA TERLAMBAT'
+                : (statusText[status] || '—');
+            const validStatus = [
+                'normal', 'watch', 'alert', 'warning'
+            ].includes(status);
+            badge.className = 'weather-level' +
+                (fresh && validStatus ? ` river-${status}` : '');
+        }
+        if (!fresh) {
+            setSource('Data pengukuran terlambat', 'dummy');
+        } else if (status === 'INVALID') {
+            setSource('Data sensor tidak valid', 'error');
+        } else {
+            setSource('Data API tersedia', 'live');
+        }
+    }
+    async function refresh() {
+        if (loading || !feedUrl) return;
+        loading = true;
+        try {
+            const response = await fetch(feedUrl, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+            const raw = await response.text();
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}: ${raw.slice(0, 120)}`
+                );
+            }
+            let feed;
+            try {
+                feed = JSON.parse(raw);
+            } catch {
+                throw new Error(
+                    `Respons bukan JSON: ${raw.slice(0, 160)}`
+                );
+            }
+            if (!feed || typeof feed !== 'object') {
+                throw new Error('Format feed tidak valid');
+            }
+            const data = Array.isArray(feed.history)
+                ? feed.history
+                : feed.data;
+            if (!Array.isArray(data)) {
+                throw new Error('history/data bukan array');
+            }
+            const today = feed.date;
+            if (today !== activeDate) {
+                activeDate = today;
+                activePage = 1;
+            }
+            rows = data
+                .filter(r => r && r.tanggal === today)
+                .map(normalize)
+                .filter(r => timeSeconds(r.waktu) !== null)
+                .sort((a, b) =>
+                    timeSeconds(a.waktu) - timeSeconds(b.waktu) ||
+                    Number(a.id || 0) - Number(b.id || 0)
+                );
+            thresholds = readThresholds(feed);
+            if (dateLabel) {
+                dateLabel.textContent = today || '—';
+            }
+            renderCurrent();
+        } catch (error) {
+            console.error('[TIDE FEED]', error);
+            setSource('Gagal mengambil data API', 'error');
+            if (badge) {
+                badge.textContent = 'KONEKSI BERMASALAH';
+                badge.className = 'weather-level';
+            }
+        } finally {
+            loading = false;
+        }
+    }
+    if (prevButton) {
+        prevButton.addEventListener('click', () => {
+            activePage--;
+            renderTable();
+        });
+    }
+    if (nextButton) {
+        nextButton.addEventListener('click', () => {
+            activePage++;
+            renderTable();
+        });
+    }
+    if (clock) {
+        const updateClock = () => {
+            clock.textContent = new Intl.DateTimeFormat('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date());
+        };
+        updateClock();
+        setInterval(updateClock, 1000);
+    }
+    window.addEventListener('resize', () => {
+        page.querySelectorAll('canvas[data-chart]').forEach(draw);
+    });
+
+    page.querySelectorAll('canvas[data-chart]').forEach(canvas => {
+        canvas.style.cursor = 'crosshair';
+        function updateHover(event) {
+            const rect = canvas.getBoundingClientRect();
+            hoverPositions.set(canvas, {
+                x: (event.clientX - rect.left) *
+                    canvas.clientWidth / rect.width,
+                y: (event.clientY - rect.top) *
+                    canvas.clientHeight / rect.height
+            });
+            draw(canvas);
+        }
+        canvas.addEventListener('pointermove', event => {
+            if (event.pointerType !== 'touch') {
+                updateHover(event);
+            }
+        });
+        canvas.addEventListener('pointerdown', updateHover);
+        canvas.addEventListener('pointerleave', event => {
+            if (event.pointerType === 'touch') return;
+            hoverPositions.delete(canvas);
+            draw(canvas);
+        });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        } else {
+            refresh();
+            if (!animationFrameId) {
+                animateCharts();
+            }
+        }
+    });
+    refresh();
+    if (animationFrameId) { cancelAnimationFrame(animationFrameId); }
+    animateCharts();
+    setInterval(refresh, 300000);
+})();
+
