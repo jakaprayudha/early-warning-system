@@ -673,65 +673,283 @@ if (locationMap) {
     setInterval(refresh, 15000);
 })();
 
+// Tornado
 (() => {
     const page = document.querySelector('[data-tornado-page]');
     if (!page) return;
-    const levels = JSON.parse(page.dataset.levels || '{}');
-    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-    const levelOf = (m, thresholds) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-        const t = thresholds[key];
-        return t && (t.op === '>' ? m > t.value : m >= t.value) ? key : found;
-    }, 'normal');
-    const trends = { rising: '▲ Menguat', falling: '▼ Melemah', steady: '■ Stabil' };
-    const source = page.querySelector('[data-tornado-source]');
-    const set = (card, field, text) => { const node = card.querySelector('[data-field="' + field + '"]'); if (node) node.textContent = text; };
-    const stat = (name, value) => { const node = page.querySelector('[data-tornado-' + name + ']'); if (node) node.textContent = value; };
 
-    const refresh = async () => {
-        try {
-            const response = await fetch(page.dataset.feedUrl, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('feed');
-            const data = await response.json();
-            let alerting = 0; let rising = 0; let max = 0;
-            data.stations.forEach((row) => {
-                const card = page.querySelector('[data-tornado-station="' + CSS.escape(row.code) + '"]');
-                if (!card) return;
-                const thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-                const m = Number(row.wind_kmh);
-                const change = Number(row.change_1h_kmh);
-                const level = levelOf(m, thresholds);
-                const trend = change >= 3 ? 'rising' : (change <= -3 ? 'falling' : 'steady');
-                max = Math.max(max, m);
-                if (level !== 'normal') alerting += 1;
-                if (trend === 'rising') rising += 1;
-                set(card, 'level_cm', fmt(m, 1));
-                set(card, 'change', (change > 0 ? '+' : '') + fmt(change, 1));
-                set(card, 'wave', fmt(row.gust_kmh));
-                set(card, 'wind', fmt(row.pressure_hpa));
-                set(card, 'time', clock(row.observed_at));
-                set(card, 'trend', trends[trend]);
-                card.querySelector('[data-field="trend"]').className = 'river-trend trend-' + trend;
-                const badge = card.querySelector('[data-field="level"]');
-                badge.textContent = levels[level];
-                badge.className = 'weather-level river-' + level;
-                const top = Math.max(60, ...Object.values(thresholds).map((t) => t.value * 1.25));
-                const pct = Math.min(100, Math.round(m / top * 100 / 5) * 5);
-                card.querySelector('[data-field="gauge"]').className = 'river-fill river-' + level + ' bar-w-' + pct;
+    const source = page.querySelector('[data-tornado-source]');
+    const cards = [
+        ...page.querySelectorAll('[data-tornado-station]')
+    ];
+
+    const labels = {
+        normal: 'Normal',
+        watch: 'Waspada',
+        alert: 'Siaga',
+        warning: 'Awas'
+    };
+
+    const trends = {
+        rising: '▲ Menguat',
+        falling: '▼ Melemah',
+        steady: '■ Stabil'
+    };
+
+    let loading = false;
+
+    const num = v =>
+        v == null || v === '' || !Number.isFinite(Number(v))
+            ? null : Number(v);
+
+    const fmt = (v, digits = 1) =>
+        num(v) === null
+            ? '—'
+            : Number(v).toLocaleString('id-ID', {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
             });
+
+    const set = (card, field, value) => {
+        const el = card.querySelector(`[data-field="${field}"]`);
+        if (el) el.textContent = value;
+    };
+
+    const stat = (name, value) => {
+        const el = page.querySelector(`[data-tornado-${name}]`);
+        if (el) el.textContent = value;
+    };
+
+    const fresh = iso => {
+        const age = Date.now() - Date.parse(iso || '');
+
+        return Number.isFinite(age)
+            && age >= -60000
+            && age <= 900000;
+    };
+
+    function levelOf(speed, rules) {
+        const w = num(rules.watch?.value);
+        const a = num(rules.alert?.value);
+        const d = num(rules.warning?.value);
+
+        if (
+            speed === null ||
+            w === null ||
+            a === null ||
+            d === null ||
+            !(w < a && a < d)
+        ) {
+            return null;
+        }
+
+        let level = 'normal';
+
+        for (const key of ['watch', 'alert', 'warning']) {
+            const rule = rules[key];
+
+            if (
+                rule.op === '>'
+                    ? speed > rule.value
+                    : speed >= rule.value
+            ) {
+                level = key;
+            }
+        }
+
+        return level;
+    }
+
+    async function refresh() {
+        if (loading) return;
+        loading = true;
+
+        try {
+            const response = await fetch(page.dataset.feedUrl, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const feed = await response.json();
+
+            if (!Array.isArray(feed.stations)) {
+                throw new Error('stations bukan array');
+            }
+
+            const indexed = new Map(
+                feed.stations.map(r => [String(r.code), r])
+            );
+
+            let alerting = 0;
+            let rising = 0;
+            let max = null;
+
+            for (const card of cards) {
+                const row = indexed.get(
+                    card.dataset.tornadoStation
+                ) || {};
+
+                const speed = num(row.wind_kmh);
+                const isFresh = fresh(row.observed_at);
+
+                const rules = feed.thresholds?.[
+                    card.dataset.tornadoStation
+                ] || {};
+
+                const level = isFresh
+                    ? levelOf(speed, rules)
+                    : null;
+
+                const status = speed === null
+                    ? 'DATA TIDAK TERSEDIA'
+                    : !isFresh
+                        ? 'DATA TERLAMBAT'
+                        : level === null
+                            ? 'AMBANG BELUM DIATUR'
+                            : labels[level];
+
+                if (level && level !== 'normal') {
+                    alerting++;
+                }
+
+                if (speed !== null && isFresh) {
+                    max = Math.max(max ?? speed, speed);
+                }
+
+                if (isFresh && row.trend === 'rising') {
+                    rising++;
+                }
+
+                set(card, 'level_cm', fmt(speed));
+
+                set(
+                    card,
+                    'change',
+                    num(row.change_1h_kmh) > 0
+                        ? '+' + fmt(row.change_1h_kmh)
+                        : fmt(row.change_1h_kmh)
+                );
+
+                set(card, 'temperature', fmt(row.temperature_c));
+                set(card, 'pressure', fmt(row.pressure_hpa));
+                set(card, 'humidity', fmt(row.humidity_pct));
+                set(card, 'rain', fmt(row.rain_mm));
+                set(card, 'direction', row.wind_direction || '—');
+                set(card, 'lightning', fmt(row.lightning_count, 0));
+
+                set(
+                    card,
+                    'time',
+                    row.observed_at
+                        ? `${row.observed_at.slice(11, 19)} WIB`
+                        : '—'
+                );
+
+                const t = card.querySelector('[data-field="trend"]');
+
+                if (t) {
+                    t.textContent = isFresh
+                        ? (trends[row.trend] || '—')
+                        : '—';
+
+                    t.className = 'river-trend' +
+                        (isFresh && trends[row.trend]
+                            ? ' trend-' + row.trend
+                            : '');
+                }
+
+                const badge = card.querySelector(
+                    '[data-field="level"]'
+                );
+
+                if (badge) {
+                    badge.textContent = status;
+                    badge.className = 'weather-level' +
+                        (level ? ' river-' + level : '');
+                }
+
+                const top = Math.max(
+                    60,
+                    ...Object.values(rules).map(
+                        r => num(r.value) ?? 0
+                    )
+                ) * 1.25;
+
+                const pct = speed === null
+                    ? 0
+                    : Math.max(
+                        0,
+                        Math.min(
+                            100,
+                            Math.round((speed / top) * 20) * 5
+                        )
+                    );
+
+                const gauge = card.querySelector(
+                    '[data-field="gauge"]'
+                );
+
+                if (gauge) {
+                    gauge.className = 'river-fill' +
+                        (level ? ' river-' + level : '') +
+                        ` bar-w-${pct}`;
+                }
+            }
+
             stat('alerting', String(alerting));
             stat('rising', String(rising));
-            stat('max', fmt(max, 1));
-            stat('updated', clock(data.generated_at));
-            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
+            stat('max', fmt(max));
+
+            stat('updated', new Intl.DateTimeFormat('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date()));
+
+            if (source) {
+                source.className = 'weather-source live';
+                source.textContent = 'Sumber: API sensor';
+            }
+
         } catch (error) {
-            source.className = 'weather-source error';
-            source.lastChild.textContent = 'Gagal memuat data';
+            console.error('[TORNADO DASHBOARD]', error);
+
+            if (source) {
+                source.className = 'weather-source error';
+                source.textContent = 'Gagal mengambil data API';
+            }
+
+            cards.forEach(card => {
+                const badge = card.querySelector(
+                    '[data-field="level"]'
+                );
+
+                if (badge) {
+                    badge.className = 'weather-level';
+                    badge.textContent = 'KONEKSI BERMASALAH';
+                }
+            });
+
+        } finally {
+            loading = false;
         }
-    };
-    setInterval(refresh, 15000);
+    }
+
+    refresh();
+
+    // REFRESH SETIAP 5 MENIT
+    setInterval(refresh, 300000);
 })();
+
 
 // cuaca
 (() => {
@@ -1384,51 +1602,34 @@ if (locationMap) {
         if (raf !== null) {
             cancelAnimationFrame(raf);
         }
-
         raf = null;
     }
 
-    // Pagination 10 baris.
     function renderTable() {
         if (!tbody) return;
-
-        const pages = Math.max(
-            1,
-            Math.ceil(rows.length / PAGE_SIZE)
-        );
-
-        activePage = Math.max(
-            1,
-            Math.min(activePage, pages)
-        );
-
+        const pages = Math.max(1,Math.ceil(rows.length / PAGE_SIZE));
+        activePage = Math.max(1,Math.min(activePage, pages));
         if (count) {
             count.textContent = String(rows.length);
         }
-
         if (pageInfo) {
             pageInfo.textContent =
                 `Halaman ${activePage} dari ${pages}`;
         }
-
         if (prev) prev.disabled = activePage <= 1;
         if (next) next.disabled = activePage >= pages;
-
         if (numbers) {
             numbers.replaceChildren();
-
             const from = Math.max(
                 1,
                 Math.min(activePage - 2, pages - 4)
             );
-
             for (
                 let p = from;
                 p <= Math.min(pages, from + 4);
                 p++
             ) {
                 const b = document.createElement('button');
-
                 b.type = 'button';
                 b.className = 'button secondary';
                 b.textContent = String(p);
@@ -1437,38 +1638,29 @@ if (locationMap) {
                     'aria-label',
                     `Halaman ${p}`
                 );
-
                 b.addEventListener('click', () => {
                     activePage = p;
                     renderTable();
                 });
-
                 numbers.append(b);
             }
         }
-
         tbody.replaceChildren();
-
         const visible = rows.slice().reverse().slice(
             (activePage - 1) * PAGE_SIZE,
             activePage * PAGE_SIZE
         );
-
         if (!visible.length) {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
-
             td.colSpan = 5;
             td.textContent = 'Belum ada data hari ini';
-
             tr.append(td);
             tbody.append(tr);
             return;
         }
-
         for (const r of visible) {
             const tr = document.createElement('tr');
-
             [
                 r.waktu,
                 fmt(r.water_level_cm),
@@ -1480,7 +1672,6 @@ if (locationMap) {
                 td.textContent = String(value);
                 tr.append(td);
             });
-
             tbody.append(tr);
         }
     }
@@ -1488,34 +1679,20 @@ if (locationMap) {
     function render() {
         drawAll();
         renderTable();
-
         const last = rows[rows.length - 1];
-
         setNow('water_level_cm', fmt(last?.water_level_cm));
         setNow('sensor_distance_cm', fmt(last?.sensor_distance_cm));
         setNow('change_1h_cm', fmt(last?.change_1h_cm));
-
-        setNow(
-            'trend',
-            trendLabels[last?.trend] || '—'
-        );
-
-        setNow(
-            'observed_at',
-            last?.waktu ? `${last.waktu} WIB` : '—'
-        );
-
+        setNow('trend',trendLabels[last?.trend] || '—');
+        setNow('observed_at',last?.waktu ? `${last.waktu} WIB` : '—');
         if (!last) {
             fresh = false;
-
             if (badge) {
                 badge.textContent = 'BELUM ADA DATA';
             }
-
             setSource('Belum ada data hari ini');
             return;
         }
-
         const age = Date.now()
             - Date.parse(last.observed_at || '');
         fresh =
@@ -1673,133 +1850,921 @@ if (locationMap) {
 
 
 // Tornado
+
 (() => {
     const page = document.querySelector('[data-tornado-monitor]');
     if (!page) return;
-    const levels = JSON.parse(page.dataset.levels || '{}');
-    const fmt = (value, digits = 1) => Number(value).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    const clock = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour12: false, timeZone: 'Asia/Jakarta' }).replace(/\./g, ':');
-    const levelColors = { watch: '#d9822b', alert: '#c8541a', warning: '#b53a31' };
-    const trends = { rising: '▲ Menguat', falling: '▼ Melemah', steady: '■ Stabil' };
-    const MAX_POINTS = 120;
-    let series = [];
-    let thresholds = {};
+
+    const feedUrl = page.dataset.feedUrl;
+
+    if (!feedUrl) {
+        console.error('[TORNADO] data-feed-url belum ada');
+        return;
+    }
+
     const source = page.querySelector('[data-monitor-source]');
-    const levelOf = (cm) => ['watch', 'alert', 'warning'].reduce((found, key) => {
-        const t = thresholds[key];
-        return t && (t.op === '>' ? cm > t.value : cm >= t.value) ? key : found;
-    }, 'normal');
+    const badge = page.querySelector('[data-monitor-level]');
+    const tbody = page.querySelector('[data-monitor-rows]');
+    const count = page.querySelector('[data-monitor-count]');
+    const dateLabel = page.querySelector('[data-monitor-date]');
+    const pageInfo = page.querySelector('[data-page-info]');
+    const numbers = page.querySelector('[data-page-numbers]');
+    const prev = page.querySelector('[data-page-prev]');
+    const next = page.querySelector('[data-page-next]');
+    const clock = page.querySelector('[data-monitor-clock]');
 
-    const draw = (canvas) => {
-        const key = canvas.dataset.chart;
-        const digits = Number(canvas.dataset.digits);
-        const color = canvas.dataset.color;
-        const lines = canvas.dataset.thresholds ? Object.entries(thresholds) : [];
-        const ratio = window.devicePixelRatio || 1;
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
-        if (!width || !height) return;
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        const ctx = canvas.getContext('2d');
-        ctx.scale(ratio, ratio);
-        ctx.clearRect(0, 0, width, height);
-        const pad = { l: 46, r: 12, t: 10, b: 22 };
-        const values = series.map((row) => Number(row[key]));
-        if (values.length < 2) return;
-        let min = Math.min(...values, ...lines.map(([, t]) => t.value));
-        let max = Math.max(...values, ...lines.map(([, t]) => t.value));
-        if (max - min < 1e-6) { max += 1; min -= 1; }
-        const span = max - min;
-        min -= span * 0.08;
-        max += span * 0.08;
-        const x = (i) => pad.l + (width - pad.l - pad.r) * i / (values.length - 1);
-        const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - (v - min) / (max - min));
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.fillStyle = '#75858a';
-        ctx.strokeStyle = '#e4ebe8';
-        ctx.lineWidth = 1;
-        for (let g = 0; g <= 4; g += 1) {
-            const v = min + (max - min) * g / 4;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(width - pad.r, y(v)); ctx.stroke();
-            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-            ctx.fillText(fmt(v, digits), pad.l - 6, y(v));
-        }
-        ctx.textBaseline = 'alphabetic';
-        [0, Math.floor((values.length - 1) / 2), values.length - 1].forEach((i, n) => {
-            ctx.textAlign = n === 0 ? 'left' : (n === 2 ? 'right' : 'center');
-            ctx.fillText(clock(series[i].observed_at).slice(0, 5), x(i), height - 6);
-        });
-        lines.forEach(([sev, t]) => {
-            ctx.save();
-            ctx.setLineDash([5, 4]); ctx.strokeStyle = levelColors[sev]; ctx.lineWidth = 1.2;
-            ctx.beginPath(); ctx.moveTo(pad.l, y(t.value)); ctx.lineTo(width - pad.r, y(t.value)); ctx.stroke();
-            ctx.setLineDash([]); ctx.fillStyle = levelColors[sev]; ctx.textAlign = 'right';
-            ctx.fillText(levels[sev] + ' ' + fmt(t.value, 0), width - pad.r - 2, y(t.value) - 3);
-            ctx.restore();
-        });
-        ctx.beginPath();
-        values.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
-        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-        ctx.beginPath(); ctx.arc(x(values.length - 1), y(values[values.length - 1]), 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
+    const canvases = [
+        ...page.querySelectorAll('canvas[data-chart]')
+    ];
+
+    const hover = new WeakMap();
+    const PAGE_SIZE = 10;
+
+    const colors = {
+        watch: '#d9822b',
+        alert: '#c8541a',
+        warning: '#b53a31'
     };
 
-    const render = () => {
-        page.querySelectorAll('canvas[data-chart]').forEach(draw);
-        const last = series[series.length - 1];
-        if (!last) return;
-        const now = (name, text) => { const node = page.querySelector('[data-now="' + name + '"]'); if (node) node.textContent = text; };
-        now('wind_kmh', fmt(last.wind_kmh));
-        now('change_1h_kmh', (last.change_1h_kmh > 0 ? '+' : '') + fmt(last.change_1h_kmh));
-        now('gust_kmh', fmt(last.gust_kmh));
-        now('pressure_hpa', fmt(last.pressure_hpa));
-        now('observed_at', clock(last.observed_at));
-        const change = Number(last.change_1h_kmh);
-        const trend = change >= 3 ? 'rising' : (change <= -3 ? 'falling' : 'steady');
-        now('trend', trends[trend]);
-        page.querySelector('[data-now="trend"]').className = 'river-trend trend-' + trend;
-        const level = levelOf(Number(last.wind_kmh));
-        const badge = page.querySelector('[data-monitor-level]');
-        badge.textContent = levels[level];
-        badge.className = 'weather-level river-' + level;
-        const body = page.querySelector('[data-monitor-rows]');
-        body.replaceChildren(...series.slice(-12).reverse().map((row) => {
-            const tr = document.createElement('tr');
-            [clock(row.observed_at), fmt(row.wind_kmh), (row.change_1h_kmh > 0 ? '+' : '') + fmt(row.change_1h_kmh), fmt(row.gust_kmh), fmt(row.pressure_hpa)].forEach((text) => {
-                const td = document.createElement('td'); td.textContent = text; tr.append(td);
+    const labels = {
+        normal: 'NORMAL',
+        watch: 'WASPADA',
+        alert: 'SIAGA',
+        warning: 'AWAS'
+    };
+
+    const trends = {
+        rising: '▲ Menguat',
+        falling: '▼ Melemah',
+        steady: '■ Stabil'
+    };
+
+    const units = {
+        wind_kmh: 'km/jam',
+        change_1h_kmh: 'km/jam',
+        temperature_c: '°C',
+        humidity_pct: '%',
+        pressure_hpa: 'hPa',
+        rain_mm: 'mm'
+    };
+
+    const titles = {
+        wind_kmh: 'Kecepatan angin',
+        change_1h_kmh: 'Perubahan 1 jam',
+        temperature_c: 'Suhu udara',
+        humidity_pct: 'Kelembapan',
+        pressure_hpa: 'Tekanan udara',
+        rain_mm: 'Curah hujan'
+    };
+
+    let rows = [];
+    let thresholds = {};
+    let activePage = 1;
+    let activeDate = '';
+    let loading = false;
+    let fresh = false;
+    let raf = null;
+    let lastFrame = 0;
+
+    const reducedMotion =
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        ?? false;
+
+    const num = v =>
+        v === null ||
+        v === undefined ||
+        v === '' ||
+        !Number.isFinite(Number(v))
+            ? null
+            : Number(v);
+
+    const fmt = (v, digits = 1) =>
+        num(v) === null
+            ? '—'
+            : Number(v).toLocaleString('id-ID', {
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
             });
-            return tr;
-        }));
+
+    const seconds = time => {
+        const m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(time || '');
+
+        if (!m) return null;
+
+        const [h, min, sec] = m.slice(1).map(Number);
+
+        return h < 24 && min < 60 && sec < 60
+            ? h * 3600 + min * 60 + sec
+            : null;
     };
 
-    let first = true;
-    const refresh = async () => {
-        try {
-            const response = await fetch(first ? page.dataset.feedUrl : page.dataset.feedUrl.replace('&history=1', ''), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('feed');
-            const data = await response.json();
-            if (first && Array.isArray(data.history)) series = data.history.slice();
-            first = false;
-            const row = data.stations[0];
-            if (row) {
-                thresholds = (data.thresholds && data.thresholds[row.code]) || {};
-                if (!series.some((item) => item.observed_at === row.observed_at)) series.push(row);
-            }
-            series = series.slice(-MAX_POINTS);
-            page.querySelector('[data-monitor-clock]').textContent = clock(data.generated_at);
-            source.className = 'weather-source ' + (data.source === 'live' ? 'live' : 'dummy');
-            source.lastChild.textContent = data.source === 'live' ? 'Sumber: API sensor' : 'Sumber: data simulasi';
-            render();
-        } catch (error) {
-            source.className = 'weather-source error';
-            source.lastChild.textContent = 'Gagal memuat data';
+    const setNow = (key, value) => {
+        const node = page.querySelector(`[data-now="${key}"]`);
+        if (node) node.textContent = value;
+    };
+
+    const setSource = (text, cls = 'dummy') => {
+        if (source) {
+            source.className = 'weather-source ' + cls;
+            source.textContent = text;
         }
     };
-    window.addEventListener('resize', render);
+
+    // Ambang kecepatan angin menggunakan km/jam.
+    const getRules = feed => {
+        const code = new URL(
+            feedUrl,
+            location.href
+        ).searchParams.get('code');
+
+        const raw = feed.thresholds?.[code] || {};
+        const result = {};
+
+        for (const key of ['watch', 'alert', 'warning']) {
+            const value = num(raw[key]?.value);
+
+            if (value !== null) {
+                result[key] = {
+                    value,
+                    op: raw[key].op === '>' ? '>' : '>='
+                };
+            }
+        }
+
+        return result;
+    };
+
+    const levelOf = speed => {
+        if (speed === null) return null;
+
+        const w = thresholds.watch?.value;
+        const a = thresholds.alert?.value;
+        const d = thresholds.warning?.value;
+
+        if (
+            ![w, a, d].every(Number.isFinite) ||
+            !(w < a && a < d)
+        ) {
+            return 'unconfigured';
+        }
+
+        let status = 'normal';
+
+        for (const key of ['watch', 'alert', 'warning']) {
+            const t = thresholds[key];
+
+            if (
+                t.op === '>'
+                    ? speed > t.value
+                    : speed >= t.value
+            ) {
+                status = key;
+            }
+        }
+
+        return status;
+    };
+
+    // Menyamakan field API asli dengan FE.
+    const normalize = r => ({
+        id: r.id ?? null,
+        tanggal: r.tanggal,
+        waktu: r.waktu || (r.observed_at || '').slice(11, 19),
+
+        observed_at: r.observed_at ||
+            `${r.tanggal}T${r.waktu}+07:00`,
+
+        wind_kmh: num(r.wind_kmh ?? r.kecepatan_angin),
+        wind_deg: num(r.wind_deg ?? r.derajat_angin),
+        wind_direction: r.wind_direction ?? r.arah_angin ?? null,
+
+        temperature_c: num(r.temperature_c ?? r.suhu),
+        humidity_pct: num(r.humidity_pct ?? r.kelembapan),
+        pressure_hpa: num(r.pressure_hpa ?? r.tekanan),
+        rain_mm: num(r.rain_mm ?? r.curah_hujan),
+
+        lightning_count: num(
+            r.lightning_count ?? r.jumlah_petir
+        ),
+        lightning_distance: num(
+            r.lightning_distance ?? r.jarak_petir
+        ),
+
+        noise: num(r.noise),
+        disturber: num(r.disturber),
+
+        change_1h_kmh: num(r.change_1h_kmh),
+        trend: r.trend || 'TIDAK_ADA_DATA'
+    });
+
+    // Menggambar grafik Canvas 00:00 - 24:00 WIB.
+    function draw(canvas, tick = performance.now()) {
+        const key = canvas.dataset.chart;
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight || 260;
+
+        if (width < 100 || height < 100) return;
+
+        const ratio = Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+        const pixelW = Math.round(width * ratio);
+        const pixelH = Math.round(height * ratio);
+
+        if (
+            canvas.width !== pixelW ||
+            canvas.height !== pixelH
+        ) {
+            canvas.width = pixelW;
+            canvas.height = pixelH;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        const left = 52;
+        const right = 16;
+        const top = 18;
+        const bottom = 32;
+
+        const plotW = width - left - right;
+        const plotH = height - top - bottom;
+
+        const points = rows
+            .map(r => ({
+                t: seconds(r.waktu),
+                v: num(r[key])
+            }))
+            .filter(p =>
+                p.t !== null && p.v !== null
+            );
+
+        const lines = key === 'wind_kmh'
+            ? Object.entries(thresholds)
+            : [];
+
+        const values = [
+            ...points.map(p => p.v),
+            ...lines.map(([, rule]) => rule.value)
+        ];
+
+        if (!values.length) return;
+
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+
+        if (max - min < 0.01) {
+            min -= 1;
+            max += 1;
+        }
+
+        const margin = (max - min) * 0.1;
+        min -= margin;
+        max += margin;
+
+        const x = t =>
+            left + t / 86400 * plotW;
+
+        const y = v =>
+            top + (1 - (v - min) / (max - min)) * plotH;
+
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.lineWidth = 1;
+
+        // Garis horizontal dan nilai.
+        for (let i = 0; i <= 4; i++) {
+            const v = min + (max - min) * i / 4;
+
+            ctx.strokeStyle = '#e4ebe8';
+
+            ctx.beginPath();
+            ctx.moveTo(left, y(v));
+            ctx.lineTo(width - right, y(v));
+            ctx.stroke();
+
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#75858a';
+
+            ctx.fillText(fmt(v), left - 6, y(v));
+        }
+
+        // Sumbu waktu WIB.
+        [
+            [0, '00:00'],
+            [21600, '06:00'],
+            [43200, '12:00'],
+            [64800, '18:00'],
+            [86400, '24:00']
+        ].forEach(([t, label]) => {
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = '#75858a';
+
+            ctx.textAlign = t === 0
+                ? 'left'
+                : t === 86400
+                    ? 'right'
+                    : 'center';
+
+            ctx.fillText(label, x(t), height - 8);
+        });
+
+        // Garis ambang angin jika tersedia.
+        for (const [sev, rule] of lines) {
+            ctx.save();
+
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = colors[sev];
+
+            ctx.beginPath();
+            ctx.moveTo(left, y(rule.value));
+            ctx.lineTo(width - right, y(rule.value));
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        if (!points.length) return;
+
+        const color = canvas.dataset.color || '#2f80c9';
+
+        // Grafik putus saat jeda data lebih dari 15 menit.
+        ctx.beginPath();
+
+        points.forEach((p, i) => {
+            if (
+                i === 0 ||
+                p.t - points[i - 1].t > 900
+            ) {
+                ctx.moveTo(x(p.t), y(p.v));
+            } else {
+                ctx.lineTo(x(p.t), y(p.v));
+            }
+        });
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Titik terbaru.
+        const last = points[points.length - 1];
+
+        const lx = x(last.t);
+        const ly = y(last.v);
+
+        // Ripple lambat, satu siklus sekitar 5 detik.
+        if (fresh && !reducedMotion) {
+            const phase = (tick % 5000) / 5000;
+
+            [phase, (phase + 0.5) % 1].forEach((p, i) => {
+                ctx.save();
+
+                ctx.globalAlpha =
+                    (i === 0 ? 0.55 : 0.40) * (1 - p);
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = i === 0 ? 3.5 : 3;
+
+                ctx.beginPath();
+                ctx.arc(
+                    lx,
+                    ly,
+                    5 + 18 * p,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.stroke();
+
+                ctx.restore();
+            });
+        }
+
+        // Titik inti.
+        ctx.beginPath();
+        ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(lx, ly, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        // Tooltip ketika kursor dekat titik grafik.
+        const cursor = hover.get(canvas);
+        if (!cursor) return;
+
+        let nearest = null;
+        let best = 30 ** 2;
+
+        for (const p of points) {
+            const d =
+                (x(p.t) - cursor.x) ** 2 +
+                (y(p.v) - cursor.y) ** 2;
+
+            if (d < best) {
+                best = d;
+                nearest = p;
+            }
+        }
+
+        if (!nearest) return;
+
+        const px = x(nearest.t);
+        const py = y(nearest.v);
+
+        const hh = String(
+            Math.floor(nearest.t / 3600)
+        ).padStart(2, '0');
+
+        const mm = String(
+            Math.floor((nearest.t % 3600) / 60)
+        ).padStart(2, '0');
+
+        const ss = String(
+            nearest.t % 60
+        ).padStart(2, '0');
+
+        const title = titles[key] || 'Pengukuran';
+        const timeText = `${hh}:${mm}:${ss} WIB`;
+        const valueText = `${fmt(nearest.v)} ${units[key] || ''}`;
+
+        ctx.save();
+
+        // Garis vertikal indikator waktu.
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = '#84969e';
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(px, top);
+        ctx.lineTo(px, height - bottom);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+
+        // Lingkaran titik aktif.
+        ctx.beginPath();
+        ctx.arc(px, py, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+
+        ctx.font = '12px system-ui, sans-serif';
+
+        const boxW = Math.min(
+            width - 16,
+            Math.max(
+                160,
+                ctx.measureText(title).width + 24,
+                ctx.measureText(timeText).width + 24,
+                ctx.measureText(valueText).width + 24
+            )
+        );
+
+        const boxH = 82;
+
+        const bx = Math.max(
+            8,
+            Math.min(px + 14, width - boxW - 8)
+        );
+
+        const by = Math.max(
+            8,
+            Math.min(
+                py - boxH - 12 < 8
+                    ? py + 12
+                    : py - boxH - 12,
+                height - boxH - 8
+            )
+        );
+
+        // Latar tooltip.
+        ctx.fillStyle = 'rgba(20,43,56,.96)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, boxW, boxH, 8);
+        ctx.fill();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+
+        ctx.font = 'bold 12px system-ui, sans-serif';
+        ctx.fillText(title, bx + 12, by + 18);
+
+        ctx.font = '12px system-ui, sans-serif';
+        ctx.fillText(timeText, bx + 12, by + 42);
+
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.fillText(valueText, bx + 12, by + 64);
+
+        ctx.restore();
+    }
+
+    function drawAll(t) {
+        canvases.forEach(canvas => draw(canvas, t));
+    }
+
+    function stopAnimation() {
+        if (raf !== null) {
+            cancelAnimationFrame(raf);
+        }
+
+        raf = null;
+    }
+
+    // Maksimal sekitar 20 FPS agar lebih ringan.
+    function animate(t) {
+        if (!document.hidden && t - lastFrame >= 50) {
+            lastFrame = t;
+            drawAll(t);
+        }
+
+        raf = requestAnimationFrame(animate);
+    }
+
+    function startAnimation() {
+        if (
+            reducedMotion ||
+            document.hidden ||
+            !fresh ||
+            raf !== null
+        ) {
+            return;
+        }
+
+        raf = requestAnimationFrame(animate);
+    }
+
+    // Pagination tabel: 10 data per halaman.
+    function renderTable() {
+        if (!tbody) return;
+
+        const pages = Math.max(
+            1,
+            Math.ceil(rows.length / PAGE_SIZE)
+        );
+
+        activePage = Math.max(
+            1,
+            Math.min(activePage, pages)
+        );
+
+        if (count) {
+            count.textContent = String(rows.length);
+        }
+
+        if (pageInfo) {
+            pageInfo.textContent =
+                `Halaman ${activePage} dari ${pages}`;
+        }
+
+        if (prev) prev.disabled = activePage === 1;
+        if (next) next.disabled = activePage === pages;
+
+        if (numbers) {
+            numbers.replaceChildren();
+
+            const from = Math.max(
+                1,
+                Math.min(activePage - 2, pages - 4)
+            );
+
+            for (
+                let n = from;
+                n <= Math.min(pages, from + 4);
+                n++
+            ) {
+                const b = document.createElement('button');
+
+                b.type = 'button';
+                b.className = 'button secondary';
+                b.textContent = String(n);
+                b.disabled = n === activePage;
+
+                b.setAttribute('aria-label', `Halaman ${n}`);
+
+                b.addEventListener('click', () => {
+                    activePage = n;
+                    renderTable();
+                });
+
+                numbers.append(b);
+            }
+        }
+
+        tbody.replaceChildren();
+
+        const visible = rows.slice().reverse().slice(
+            (activePage - 1) * PAGE_SIZE,
+            activePage * PAGE_SIZE
+        );
+
+        if (!visible.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+
+            td.colSpan = 13;
+            td.textContent = 'Belum ada data hari ini';
+
+            tr.append(td);
+            tbody.append(tr);
+            return;
+        }
+
+        for (const r of visible) {
+            const values = [
+                r.waktu,
+                fmt(r.wind_kmh),
+                fmt(r.change_1h_kmh),
+                r.wind_direction || '—',
+                fmt(r.wind_deg, 0),
+                fmt(r.temperature_c),
+                fmt(r.humidity_pct),
+                fmt(r.pressure_hpa),
+                fmt(r.rain_mm),
+                fmt(r.lightning_count, 0),
+                fmt(r.lightning_distance),
+                fmt(r.noise, 0),
+                fmt(r.disturber, 0)
+            ];
+
+            const tr = document.createElement('tr');
+
+            values.forEach(value => {
+                const td = document.createElement('td');
+                td.textContent = String(value);
+                tr.append(td);
+            });
+
+            tbody.append(tr);
+        }
+    }
+
+    function render() {
+        const last = rows[rows.length - 1];
+
+        const age = last
+            ? Date.now() - Date.parse(last.observed_at || '')
+            : NaN;
+
+        fresh =
+            !!last &&
+            num(last.wind_kmh) !== null &&
+            Number.isFinite(age) &&
+            age >= -60000 &&
+            age <= 900000;
+
+        setNow('wind_kmh', fmt(last?.wind_kmh));
+
+        setNow(
+            'change_1h_kmh',
+            num(last?.change_1h_kmh) > 0
+                ? '+' + fmt(last.change_1h_kmh)
+                : fmt(last?.change_1h_kmh)
+        );
+
+        setNow('temperature_c', fmt(last?.temperature_c));
+        setNow('pressure_hpa', fmt(last?.pressure_hpa));
+        setNow('humidity_pct', fmt(last?.humidity_pct));
+        setNow('rain_mm', fmt(last?.rain_mm));
+
+        setNow(
+            'wind_direction',
+            last?.wind_direction || '—'
+        );
+
+        setNow('wind_deg', fmt(last?.wind_deg, 0));
+        setNow('lightning_count', fmt(last?.lightning_count, 0));
+        setNow('lightning_distance', fmt(last?.lightning_distance));
+        setNow('noise', fmt(last?.noise, 0));
+        setNow('disturber', fmt(last?.disturber, 0));
+
+        setNow('trend', trends[last?.trend] || '—');
+
+        setNow(
+            'observed_at',
+            last?.waktu ? `${last.waktu} WIB` : '—'
+        );
+
+        if (!last) {
+            setSource('Belum ada data hari ini');
+
+            if (badge) {
+                badge.textContent = 'BELUM ADA DATA';
+                badge.className = 'weather-level';
+            }
+        } else {
+            const level = levelOf(last.wind_kmh);
+
+            if (badge) {
+                badge.textContent = last.wind_kmh === null
+                    ? 'DATA SENSOR TIDAK VALID'
+                    : !fresh
+                        ? 'DATA TERLAMBAT'
+                        : level === 'unconfigured'
+                            ? 'AMBANG BELUM DIATUR'
+                            : labels[level] || '—';
+
+                badge.className = 'weather-level' +
+                    (fresh && labels[level]
+                        ? ` river-${level}`
+                        : '');
+            }
+
+            if (last.wind_kmh === null) {
+                setSource('Data sensor tidak valid', 'error');
+            } else if (!fresh) {
+                setSource('Data pengukuran terlambat', 'dummy');
+            } else {
+                setSource('Data API tersedia', 'live');
+            }
+        }
+
+        if (!fresh) {
+            stopAnimation();
+        }
+
+        drawAll();
+        renderTable();
+        startAnimation();
+    }
+
+    // Mengambil seluruh data hari ini dari PHP.
+    async function refresh() {
+        if (loading) return;
+        loading = true;
+
+        try {
+            const response = await fetch(feedUrl, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+
+            const raw = await response.text();
+
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}: ${raw.slice(0, 120)}`
+                );
+            }
+
+            let feed;
+
+            try {
+                feed = JSON.parse(raw);
+            } catch {
+                throw new Error(
+                    `Respons bukan JSON: ${raw.slice(0, 160)}`
+                );
+            }
+
+            const history = Array.isArray(feed.history)
+                ? feed.history
+                : feed.data;
+
+            if (!Array.isArray(history)) {
+                throw new Error('history/data harus array');
+            }
+
+            if (feed.date !== activeDate) {
+                activeDate = feed.date;
+                activePage = 1;
+            }
+
+            rows = history
+                .filter(r =>
+                    r && r.tanggal === feed.date
+                )
+                .map(normalize)
+                .filter(r =>
+                    seconds(r.waktu) !== null
+                )
+                .sort((a, b) =>
+                    seconds(a.waktu) - seconds(b.waktu) ||
+                    Number(a.id || 0) - Number(b.id || 0)
+                );
+
+            thresholds = getRules(feed);
+
+            if (dateLabel) {
+                dateLabel.textContent = feed.date || '—';
+            }
+
+            render();
+
+        } catch (error) {
+            console.error('[TORNADO FEED]', error);
+
+            fresh = false;
+            stopAnimation();
+
+            setSource('Gagal mengambil data API', 'error');
+
+            if (badge) {
+                badge.textContent = 'KONEKSI BERMASALAH';
+                badge.className = 'weather-level';
+            }
+
+        } finally {
+            loading = false;
+        }
+    }
+
+    // Tombol pagination.
+    prev?.addEventListener('click', () => {
+        activePage--;
+        renderTable();
+    });
+
+    next?.addEventListener('click', () => {
+        activePage++;
+        renderTable();
+    });
+
+    // Hover dan tooltip pada Canvas.
+    canvases.forEach(canvas => {
+        canvas.style.cursor = 'crosshair';
+
+        const update = e => {
+            const rect = canvas.getBoundingClientRect();
+
+            if (!rect.width || !rect.height) return;
+
+            hover.set(canvas, {
+                x: (e.clientX - rect.left) *
+                    canvas.clientWidth / rect.width,
+
+                y: (e.clientY - rect.top) *
+                    canvas.clientHeight / rect.height
+            });
+
+            if (raf === null) {
+                draw(canvas);
+            }
+        };
+
+        canvas.addEventListener('pointermove', e => {
+            if (e.pointerType !== 'touch') {
+                update(e);
+            }
+        });
+
+        canvas.addEventListener('pointerdown', update);
+
+        canvas.addEventListener('pointerleave', () => {
+            hover.delete(canvas);
+            draw(canvas);
+        });
+    });
+
+    // Jam lokal WIB.
+    const updateClock = () => {
+        if (clock) {
+            clock.textContent = new Intl.DateTimeFormat('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hourCycle: 'h23'
+            }).format(new Date());
+        }
+    };
+
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    window.addEventListener('resize', () => {
+        drawAll();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopAnimation();
+        } else {
+            refresh();
+            startAnimation();
+        }
+    });
+
     refresh();
-    setInterval(refresh, 5000);
+
+    // REFRESH DATA TETAP SETIAP 5 MENIT
+    setInterval(refresh, 300000);
 })();
+
 
 
 document.addEventListener('submit', (event) => {
